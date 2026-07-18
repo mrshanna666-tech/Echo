@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.mood.local_mood_journal import append_mood_entry, create_mood_image_path
+from src.i18n import tr
 
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ class MoodDrawer(QFrame):
         layout.setSpacing(14)
 
         header = QHBoxLayout()
-        title = QLabel("记录此刻")
+        title = QLabel(tr("记录此刻", "Capture this moment"))
         title.setObjectName("drawerTitle")
         close_button = QPushButton("×")
         close_button.setObjectName("drawerCloseButton")
@@ -52,17 +53,22 @@ class MoodDrawer(QFrame):
         header.addStretch()
         header.addWidget(close_button)
 
-        privacy = QLabel("摄像头只会在你主动记录时开启，照片仅保存在本地。关闭抽屉时会立即关闭摄像头。")
+        privacy = QLabel(
+            tr(
+                "摄像头只会在你主动记录时开启，照片仅保存在本地。关闭抽屉时会立即关闭摄像头。",
+                "The camera opens only when you choose. Photos stay local, and the camera closes with this drawer.",
+            )
+        )
         privacy.setObjectName("moodPrivacy")
         privacy.setWordWrap(True)
 
-        preview_label = QLabel("摄像头预览")
+        preview_label = QLabel(tr("摄像头预览", "Camera preview"))
         preview_label.setObjectName("sectionLabel")
 
         self.preview_stack = QStackedWidget()
         self.preview_stack.setObjectName("cameraPreview")
         self.preview_stack.setFixedHeight(212)
-        self.enable_camera_button = QPushButton("点击开启摄像头")
+        self.enable_camera_button = QPushButton(tr("点击开启摄像头", "Turn on camera"))
         self.enable_camera_button.setObjectName("cameraStartButton")
         self.enable_camera_button.clicked.connect(self.start_camera)
         self.video_widget = QVideoWidget()
@@ -70,13 +76,21 @@ class MoodDrawer(QFrame):
         self.preview_stack.addWidget(self.enable_camera_button)
         self.preview_stack.addWidget(self.video_widget)
 
-        mood_label = QLabel("心情标签")
+        mood_label = QLabel(tr("心情标签", "Mood"))
         mood_label.setObjectName("sectionLabel")
         mood_row = QHBoxLayout()
         mood_row.setSpacing(8)
         self.mood_group = QButtonGroup(self)
         self.mood_group.setExclusive(True)
-        for index, mood in enumerate(["开心", "平静", "低落", "疲惫", "焦虑"]):
+        for index, mood in enumerate(
+            [
+                tr("开心", "Happy"),
+                tr("平静", "Calm"),
+                tr("低落", "Low"),
+                tr("疲惫", "Tired"),
+                tr("焦虑", "Anxious"),
+            ]
+        ):
             button = QPushButton(mood)
             button.setObjectName("moodPill")
             button.setCheckable(True)
@@ -87,11 +101,13 @@ class MoodDrawer(QFrame):
                 button.setChecked(True)
         mood_row.addStretch()
 
-        note_label = QLabel("可选备注")
+        note_label = QLabel(tr("可选备注", "Optional note"))
         note_label.setObjectName("sectionLabel")
         self.note_edit = QTextEdit()
         self.note_edit.setObjectName("moodNote")
-        self.note_edit.setPlaceholderText("写一句此刻想留给未来自己的话……")
+        self.note_edit.setPlaceholderText(
+            tr("写一句此刻想留给未来自己的话……", "Write something for your future self...")
+        )
         self.note_edit.setFixedHeight(82)
 
         layout.addLayout(header)
@@ -110,7 +126,7 @@ class MoodDrawer(QFrame):
         self.status_label = QLabel("")
         self.status_label.setObjectName("moodStatus")
         self.status_label.setWordWrap(True)
-        self.save_button = QPushButton("拍照保存")
+        self.save_button = QPushButton(tr("拍照保存", "Capture and save"))
         self.save_button.setObjectName("primaryButton")
         self.save_button.setFixedHeight(36)
         self.save_button.clicked.connect(self.save_current_moment)
@@ -125,7 +141,7 @@ class MoodDrawer(QFrame):
                 return
             devices = QMediaDevices.videoInputs()
             if not devices:
-                self._show_status("无法访问摄像头，请检查系统权限。", error=True)
+                self._show_status(tr("无法访问摄像头，请检查系统权限。", "Camera access failed. Check system permissions."), error=True)
                 return
             self._camera = QCamera(devices[0], self)
             self._camera.errorOccurred.connect(self._handle_camera_error)
@@ -137,26 +153,26 @@ class MoodDrawer(QFrame):
             self._capture_session.setImageCapture(self._image_capture)
             self._camera.start()
             self.preview_stack.setCurrentWidget(self.video_widget)
-            self._show_status("摄像头已开启。")
+            self._show_status(tr("摄像头已开启。", "Camera is on."))
         except Exception:
             logger.exception("Failed to start camera.")
-            self._show_status("无法访问摄像头，请检查系统权限。", error=True)
+            self._show_status(tr("无法访问摄像头，请检查系统权限。", "Camera access failed. Check system permissions."), error=True)
             self.stop_camera()
 
     def save_current_moment(self) -> None:
         try:
             if self._camera is None or self._image_capture is None:
-                self._show_status("请先点击开启摄像头。", error=True)
+                self._show_status(tr("请先点击开启摄像头。", "Turn on the camera first."), error=True)
                 return
             self._pending_image_path = create_mood_image_path()
             self.save_button.setEnabled(False)
-            self.save_button.setText("正在保存...")
+            self.save_button.setText(tr("正在保存...", "Saving..."))
             self._image_capture.captureToFile(str(self._pending_image_path))
         except Exception:
             logger.exception("Failed to capture mood image.")
-            self._show_status("保存失败，请查看日志。", error=True)
+            self._show_status(tr("保存失败，请查看日志。", "Save failed. Check the log."), error=True)
             self.save_button.setEnabled(True)
-            self.save_button.setText("拍照保存")
+            self.save_button.setText(tr("拍照保存", "Capture and save"))
 
     def stop_camera(self) -> None:
         try:
@@ -181,7 +197,7 @@ class MoodDrawer(QFrame):
     def reset_for_open(self) -> None:
         self.status_label.setText("")
         self.save_button.setEnabled(True)
-        self.save_button.setText("拍照保存")
+        self.save_button.setText(tr("拍照保存", "Capture and save"))
         self.preview_stack.setCurrentWidget(self.enable_camera_button)
 
     def hideEvent(self, event) -> None:  # noqa: N802 - Qt override
@@ -194,29 +210,29 @@ class MoodDrawer(QFrame):
             if self._pending_image_path is not None:
                 image_path = self._pending_image_path
             selected = self.mood_group.checkedButton()
-            mood = selected.text() if selected is not None else "平静"
+            mood = selected.text() if selected is not None else tr("平静", "Calm")
             append_mood_entry(image_path, mood, self.note_edit.toPlainText())
             self.note_edit.clear()
-            self._show_status("已记录此刻。")
+            self._show_status(tr("已记录此刻。", "Moment saved."))
             self.saved.emit(str(image_path))
         except Exception:
             logger.exception("Failed to save mood journal entry.")
-            self._show_status("保存失败，请查看日志。", error=True)
+            self._show_status(tr("保存失败，请查看日志。", "Save failed. Check the log."), error=True)
         finally:
             self._pending_image_path = None
             self.save_button.setEnabled(True)
-            self.save_button.setText("拍照保存")
+            self.save_button.setText(tr("拍照保存", "Capture and save"))
 
     def _handle_camera_error(self, _error, error_string: str) -> None:
         logger.error("Camera error: %s", error_string)
-        self._show_status("无法访问摄像头，请检查系统权限。", error=True)
+        self._show_status(tr("无法访问摄像头，请检查系统权限。", "Camera access failed. Check system permissions."), error=True)
         self.stop_camera()
 
     def _handle_capture_error(self, _id: int, _error, error_string: str) -> None:
         logger.error("Mood image capture error: %s", error_string)
-        self._show_status("保存失败，请查看日志。", error=True)
+        self._show_status(tr("保存失败，请查看日志。", "Save failed. Check the log."), error=True)
         self.save_button.setEnabled(True)
-        self.save_button.setText("拍照保存")
+        self.save_button.setText(tr("拍照保存", "Capture and save"))
 
     def _show_status(self, text: str, error: bool = False) -> None:
         self.status_label.setText(text)

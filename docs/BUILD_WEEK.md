@@ -20,10 +20,14 @@ Work completed or materially expanded from July 13, 2026 includes:
 - recovery of unfinished activity records
 - handling of activity that crosses midnight
 - automated tests for recorder reliability, replay selection, preferences, timeline behavior, database operations, and export integrity
+- optional GPT-5.6 daily reflections with a per-request sanitized preview and explicit confirmation
+- Windows Credential Manager storage for the user's API key
+- Simplified Chinese and English interface switching without adding controls to the Memory page
+- privacy tests proving window titles and common identifiers are excluded from AI payloads
 
 ## Use of Codex and GPT-5.6
 
-Codex and GPT-5.6 were used for implementation, review, debugging, interface iteration, test design, and documentation during the submission period.
+Codex and GPT-5.6 were used for implementation, review, debugging, interface iteration, test design, and documentation during the submission period. The product integration uses the Responses API only after the user opts in and confirms a sanitized preview.
 
 Evidence to retain:
 
@@ -35,7 +39,7 @@ Evidence to retain:
 
 ## Validation
 
-On July 18, 2026, the project imported successfully and all 13 automated `unittest` tests passed.
+On July 18, 2026, the project imported successfully and all 17 automated `unittest` tests passed. The privacy suite verifies that AI payloads omit window titles, paths, email addresses, URLs, IP addresses, and notes unless notes are explicitly enabled.
 
 ## Submission positioning
 
@@ -44,4 +48,3 @@ Recommended track: **Apps for Your Life**
 Suggested one-line description:
 
 > Echo is a privacy-first Windows activity journal that turns local application history, notes, and moments into a reconstructable memory of your day.
-

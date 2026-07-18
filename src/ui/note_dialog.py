@@ -10,33 +10,37 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.i18n import tr
+
 
 class NoteDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("留下一句话")
+        self.setWindowTitle(tr("留下一句话", "Leave a note"))
         self.setMinimumWidth(460)
         self.setObjectName("noteDialog")
         self._has_faded_in = False
 
         self.editor = QTextEdit()
-        self.editor.setPlaceholderText("今天最值得记住的是……")
+        self.editor.setPlaceholderText(tr("今天最值得记住的是……", "What is most worth remembering today?"))
         self.editor.setMinimumHeight(130)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("保存")
-        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        ok_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        ok_button.setObjectName("primaryButton")
+        ok_button.setText(tr("保存", "Save"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(tr("取消", "Cancel"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 22, 22, 18)
         layout.setSpacing(14)
-        title = QLabel("留下一句话")
+        title = QLabel(tr("留下一句话", "Leave a note"))
         title.setObjectName("dialogTitle")
-        subtitle = QLabel("写一句未来的你会想看到的话。")
+        subtitle = QLabel(tr("写一句未来的你会想看到的话。", "Write something your future self will want to see."))
         subtitle.setObjectName("dialogSubtitle")
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -72,7 +76,7 @@ class NoteDialog(QDialog):
                 background: #f8ddb1;
                 color: #c17640;
             }
-            QPushButton[text="保存"] {
+            QPushButton#primaryButton {
                 background: #517556;
                 color: white;
             }

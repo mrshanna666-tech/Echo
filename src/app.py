@@ -21,11 +21,20 @@ from src.config import (
 )
 from src.database.db import Database
 from src.data_export import backup_database_connection, export_all_data
+from src.i18n import tr
+from src.openai_key_store import load_openai_api_key
+from src.preferences import load_preferences
 from src.recorder.activity_recorder import ActivityRecorder
 from src.recorder.window_tracker import WindowTracker
+from src.summary.ai_summary_generator import (
+    build_preview,
+    build_sanitized_payload,
+    generate_ai_summary_for_date,
+)
 from src.summary.local_summary_generator import generate_summary_for_date, get_today_summary_path
 from src.ui.main_window import MainWindow
 from src.ui.note_dialog import NoteDialog
+from src.ui.summary_mode_dialog import SummaryModeDialog
 from src.ui.tray import TrayController
 from src.utils.logging_setup import setup_logging
 from src.utils.resources import echo_icon_path
@@ -80,7 +89,7 @@ class EchoApp:
             QMessageBox.information(
                 None,
                 APP_NAME,
-                "Echo 已经在运行，请从系统托盘打开。",
+                tr("Echo 已经在运行，请从系统托盘打开。", "Echo is already running. Open it from the system tray."),
             )
             raise SystemExit(0)
 
@@ -127,6 +136,7 @@ class EchoApp:
                 self.today_window.add_note_requested.connect(self.add_note)
                 self.today_window.export_requested.connect(self.export_data)
                 self.today_window.clear_today_requested.connect(self.clear_today_records)
+                self.today_window.language_change_requested.connect(self._rebuild_main_window)
             self.today_window.refresh()
             self.today_window.show()
             self.today_window.raise_()
@@ -155,7 +165,7 @@ class EchoApp:
                 self.today_window.refresh()
             self.tray.tray.showMessage(
                 APP_NAME,
-                "这一句话已经留在今天。",
+                tr("这一句话已经留在今天。", "Your note was saved for today."),
                 QSystemTrayIcon.MessageIcon.Information,
                 2500,
             )
@@ -167,15 +177,22 @@ class EchoApp:
         try:
             default_name = f"echo-export-{today_str()}.zip"
             target, _ = QFileDialog.getSaveFileName(
-                self.today_window, "导出 Echo 数据", str(DATA_DIR / default_name), "ZIP 文件 (*.zip)"
+                self.today_window,
+                tr("导出 Echo 数据", "Export Echo data"),
+                str(DATA_DIR / default_name),
+                tr("ZIP 文件 (*.zip)", "ZIP files (*.zip)"),
             )
             if not target:
                 return
             output = export_all_data(self.database, Path(target))
-            self._show_message("Echo Recorder", f"数据已导出到：\n{output}", QSystemTrayIcon.MessageIcon.Information)
+            self._show_message(
+                "Echo Recorder",
+                tr(f"数据已导出到：\n{output}", f"Data exported to:\n{output}"),
+                QSystemTrayIcon.MessageIcon.Information,
+            )
         except Exception:
             logger.exception("Data export failed.")
-            self._show_message("Echo Recorder", "导出失败，请查看日志。", QSystemTrayIcon.MessageIcon.Warning)
+            self._show_message("Echo Recorder", tr("导出失败，请查看日志。", "Export failed. Check the log."), QSystemTrayIcon.MessageIcon.Warning)
 
     def clear_today_records(self) -> None:
         """Back up, then remove today's database and diary records."""
@@ -184,12 +201,15 @@ class EchoApp:
             mood_dir = DATA_DIR / "moods" / today_str()
             day_dir = DATA_DIR / today_str().replace("-", "/")
             if not usage_count and not note_count and not mood_dir.exists() and not day_dir.exists():
-                QMessageBox.information(self.today_window, "Echo Recorder", "今天没有可清空的记录。")
+                QMessageBox.information(self.today_window, "Echo Recorder", tr("今天没有可清空的记录。", "There are no records to clear today."))
                 return
             answer = QMessageBox.question(
                 self.today_window,
-                "确认清空今天的记录",
-                f"将删除 {usage_count} 条应用记录、{note_count} 条手动记录，以及今天的照片和日报。\n\n删除前会自动备份数据库，是否继续？",
+                tr("确认清空今天的记录", "Clear today's records?"),
+                tr(
+                    f"将删除 {usage_count} 条应用记录、{note_count} 条手动记录，以及今天的照片和日报。\n\n删除前会自动备份数据库，是否继续？",
+                    f"This will delete {usage_count} application records, {note_count} notes, and today's photos and reflection.\n\nEcho will back up the database first. Continue?",
+                ),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No,
             )
@@ -202,10 +222,10 @@ class EchoApp:
             shutil.rmtree(day_dir, ignore_errors=True)
             if self.today_window is not None:
                 self.today_window.refresh()
-            self._show_message("Echo Recorder", f"今天的记录已清空。\n备份：{backup}", QSystemTrayIcon.MessageIcon.Information)
+            self._show_message("Echo Recorder", tr(f"今天的记录已清空。\n备份：{backup}", f"Today's records were cleared.\nBackup: {backup}"), QSystemTrayIcon.MessageIcon.Information)
         except Exception:
             logger.exception("Clear today records failed.")
-            self._show_message("Echo Recorder", "清空失败，原始数据仍会保留，请查看日志。", QSystemTrayIcon.MessageIcon.Warning)
+            self._show_message("Echo Recorder", tr("清空失败，原始数据仍会保留，请查看日志。", "Clear failed. Original data was preserved; check the log."), QSystemTrayIcon.MessageIcon.Warning)
 
     def generate_summary(self) -> None:
         self.generate_summary_for_date(today_str())
@@ -213,13 +233,60 @@ class EchoApp:
     def generate_summary_for_date(self, date_text: str) -> None:
         try:
             self.recorder.refresh_current_duration()
-            result = generate_summary_for_date(self.database, date_text)
+            preferences = load_preferences()
+            result = None
+            used_ai = False
+            if preferences.ai_enabled:
+                app_usage = self.database.get_app_usage_by_date(date_text)
+                manual_notes = self.database.get_manual_notes_by_date(date_text)
+                payload = build_sanitized_payload(
+                    date_text,
+                    app_usage,
+                    manual_notes,
+                    preferences.ai_include_notes,
+                )
+                api_key = load_openai_api_key()
+                dialog = SummaryModeDialog(
+                    build_preview(payload, preferences.language),
+                    ai_available=bool(api_key),
+                    parent=self.today_window,
+                )
+                dialog.exec()
+                if dialog.choice == SummaryModeDialog.CANCEL:
+                    if self.today_window is not None:
+                        self.today_window.set_summary_loading(False)
+                    return
+                if dialog.choice == SummaryModeDialog.AI:
+                    try:
+                        result = generate_ai_summary_for_date(
+                            self.database,
+                            date_text,
+                            api_key,
+                            preferences.ai_include_notes,
+                            preferences.language,
+                        )
+                        used_ai = True
+                    except Exception:
+                        logger.exception("GPT-5.6 summary failed; using local fallback.")
+                        result = generate_summary_for_date(self.database, date_text)
+                        QMessageBox.warning(
+                            self.today_window,
+                            "Echo Recorder",
+                            tr(
+                                "GPT‑5.6 暂时不可用，已改用完全本地总结；没有继续上传其他数据。",
+                                "GPT‑5.6 was unavailable, so Echo used the fully local summary. No additional data was sent.",
+                            ),
+                        )
+                else:
+                    result = generate_summary_for_date(self.database, date_text)
+            else:
+                result = generate_summary_for_date(self.database, date_text)
             if result is None:
                 if self.today_window is not None:
                     self.today_window.set_summary_result(False)
                 self._show_message(
-                    "日报生成失败",
-                    "日报生成失败，请查看日志。",
+                    tr("日报生成失败", "Reflection failed"),
+                    tr("日报生成失败，请查看日志。", "The reflection failed. Check the log."),
                     QSystemTrayIcon.MessageIcon.Warning,
                 )
                 return
@@ -228,7 +295,10 @@ class EchoApp:
                 self.today_window.set_summary_result(True)
             self._show_message(
                 "Echo Recorder",
-                "今天日报已生成。",
+                tr(
+                    "GPT‑5.6 深度回顾已生成。" if used_ai else "本地日报已生成。",
+                    "GPT‑5.6 reflection generated." if used_ai else "Local reflection generated.",
+                ),
                 QSystemTrayIcon.MessageIcon.Information,
             )
         except Exception:
@@ -236,8 +306,8 @@ class EchoApp:
             if self.today_window is not None:
                 self.today_window.set_summary_result(False)
             self._show_message(
-                "日报生成失败",
-                "日报生成失败，请查看日志。",
+                tr("日报生成失败", "Reflection failed"),
+                tr("日报生成失败，请查看日志。", "The reflection failed. Check the log."),
                 QSystemTrayIcon.MessageIcon.Warning,
             )
 
@@ -248,7 +318,7 @@ class EchoApp:
                 QMessageBox.information(
                     self.today_window,
                     "Echo Recorder",
-                    "今天还没有生成日报，请先点击“生成今天日报”。",
+                    tr("今天还没有生成日报，请先点击“生成今天日报”。", "Generate today's reflection before opening it."),
                 )
                 return
             if self.today_window is None:
@@ -260,7 +330,7 @@ class EchoApp:
             logger.info("Opened today summary: %s", summary_path)
         except Exception:
             logger.exception("Open summary action failed.")
-            QMessageBox.warning(self.today_window, "Echo Recorder", "打开今天日报失败，请查看日志。")
+            QMessageBox.warning(self.today_window, "Echo Recorder", tr("打开今天日报失败，请查看日志。", "Could not open today's reflection. Check the log."))
 
     def pause_recording(self) -> None:
         try:
@@ -275,6 +345,18 @@ class EchoApp:
             self.tray.set_paused(False)
         except Exception:
             logger.exception("Resume action failed.")
+
+    def _rebuild_main_window(self) -> None:
+        try:
+            previous = self.today_window
+            self.today_window = None
+            if previous is not None:
+                previous.hide()
+                previous.deleteLater()
+            self.tray.retranslate()
+            QTimer.singleShot(0, self.show_today)
+        except Exception:
+            logger.exception("Failed to rebuild UI after language change.")
 
     def quit(self) -> None:
         logger.info("Echo Recorder exiting.")
@@ -300,7 +382,7 @@ class EchoApp:
                 self._recording_error_shown = True
                 self.tray.tray.showMessage(
                     APP_NAME,
-                    f"记录暂时遇到问题：{exc}",
+                    tr(f"记录暂时遇到问题：{exc}", f"Recording encountered a problem: {exc}"),
                     QSystemTrayIcon.MessageIcon.Warning,
                     3000,
                 )
@@ -325,7 +407,7 @@ def _install_exception_hook() -> None:
             exc_info=(exc_type, exc_value, exc_traceback),
         )
         message = "".join(traceback.format_exception_only(exc_type, exc_value)).strip()
-        QMessageBox.critical(None, "Echo Recorder", f"程序遇到错误：\n{message}")
+        QMessageBox.critical(None, "Echo Recorder", tr(f"程序遇到错误：\n{message}", f"The application encountered an error:\n{message}"))
 
     sys.excepthook = handle_exception
 

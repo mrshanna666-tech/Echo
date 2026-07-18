@@ -5,6 +5,12 @@ Echo is designed as a local-first Windows activity journal.
 ## Data handling
 
 - Activity history, notes, mood entries, photos, preferences, and generated summaries stay on the user's device by default.
+- AI reflection is disabled by default. Local reflection generation never makes a network request.
+- Before an AI reflection request, Echo displays the exact sanitized categories that may be sent and requires confirmation for that request.
+- AI requests contain only the date, aggregate app durations, and total duration. Window titles, local paths, email addresses, URLs, IP addresses, photos, and raw activity events are excluded.
+- Manual notes are excluded unless the user enables the separate notes option. Even then, common identifiers are removed before the preview and request are created.
+- The OpenAI API key is read from `OPENAI_API_KEY` or stored in Windows Credential Manager under `EchoRecorder/OpenAI`. It is never written to preferences, logs, exports, summaries, or source control.
+- If an AI request fails, Echo creates a local reflection instead and does not retry or send additional data automatically.
 - Echo does not require these personal records to be committed to source control.
 - The repository ignore rules exclude the `data/` and `logs/` directories, SQLite databases, local preferences, screenshots, recordings, secrets, and environment files.
 - Contributors must use synthetic data in tests, screenshots, demos, and documentation.
@@ -15,8 +21,8 @@ Echo is designed as a local-first Windows activity journal.
 2. Search staged files for email addresses, names, access tokens, API keys, passwords, window titles, and filesystem paths.
 3. Never commit `.env` files, database files, logs, personal photos, exports, or real activity summaries.
 4. Revoke and rotate any credential immediately if it is accidentally committed.
+5. Use synthetic app names and notes when testing the AI preview or recording a demo.
 
 ## Reporting a privacy issue
 
 Do not include personal data or secrets in a public issue. Contact the repository owner privately and provide only the minimum information needed to reproduce the problem.
-

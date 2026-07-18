@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from src.i18n import tr
+
 
 def reduced_motion_enabled() -> bool:
     if os.environ.get("ECHO_REDUCE_MOTION", "").lower() in {"1", "true", "yes", "on"}:
@@ -116,19 +118,19 @@ class Sidebar(QFrame):
 
         brand = QLabel("Echo Recorder")
         brand.setObjectName("brand")
-        tagline = QLabel("今天的记忆首页")
+        tagline = QLabel(tr("今天的记忆首页", "Your memory home"))
         tagline.setObjectName("mutedSmall")
         layout.addWidget(brand)
         layout.addWidget(tagline)
         layout.addSpacing(10)
 
         for key, label in [
-            ("today", "今天"),
-            ("timeline", "时间线"),
-            ("diary", "日报"),
-            ("notes", "一句话"),
+            ("today", tr("今天", "Today")),
+            ("timeline", tr("时间线", "Timeline")),
+            ("diary", tr("日报", "Reflection")),
+            ("notes", tr("一句话", "Notes")),
             ("memory", "Memory"),
-            ("settings", "设置"),
+            ("settings", tr("设置", "Settings")),
         ]:
             button = AnimatedNavButton(label)
             button.setObjectName("navButton")
@@ -138,7 +140,7 @@ class Sidebar(QFrame):
             layout.addWidget(button)
 
         layout.addStretch()
-        self.mood_button = AnimatedNavButton("📷  记录此刻")
+        self.mood_button = AnimatedNavButton(tr("📷  记录此刻", "📷  Capture this moment"))
         self.mood_button.setObjectName("moodButton")
         self.mood_button.clicked.connect(self.mood_requested.emit)
         layout.addWidget(self.mood_button)
@@ -149,7 +151,7 @@ class Sidebar(QFrame):
         local_row.setSpacing(7)
         self.local_dot = QLabel("●")
         self.local_dot.setObjectName("localDot")
-        local = QLabel("本地记录中")
+        local = QLabel(tr("本地记录中", "Recording locally"))
         local.setObjectName("localStatus")
         path = QLabel("data")
         path.setObjectName("mutedSmall")

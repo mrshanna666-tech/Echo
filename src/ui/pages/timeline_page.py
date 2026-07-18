@@ -7,10 +7,18 @@ from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QLineEdit,
 
 from src.database.db import Database
 from src.database.models import AppUsage
+from src.i18n import tr
 from src.utils.time_utils import display_time, human_duration, parse_db_datetime, today_str
 
 
-CATEGORIES = {"all": "全部分类", "work": "工作", "study": "学习", "communication": "沟通", "entertainment": "娱乐", "other": "其他"}
+CATEGORY_LABELS = {
+    "all": ("全部分类", "All categories"),
+    "work": ("工作", "Work"),
+    "study": ("学习", "Study"),
+    "communication": ("沟通", "Communication"),
+    "entertainment": ("娱乐", "Entertainment"),
+    "other": ("其他", "Other"),
+}
 
 
 def activity_category(app_name: str, title: str = "") -> str:
@@ -58,16 +66,21 @@ class TimelinePage(QWidget):
         root.setContentsMargins(34, 28, 34, 34)
         root.setSpacing(18)
         root.setAlignment(Qt.AlignmentFlag.AlignTop)
-        title = QLabel("时间线")
+        title = QLabel(tr("时间线", "Timeline"))
         title.setObjectName("pageTitle")
-        subtitle = QLabel("连续活动会自动合并；可以按应用、窗口标题或分类搜索最近记录。")
+        subtitle = QLabel(
+            tr(
+                "连续活动会自动合并；可以按应用、窗口标题或分类搜索最近记录。",
+                "Continuous activity is merged automatically. Search recent records by app, title, or category.",
+            )
+        )
         subtitle.setObjectName("storyBody")
         controls = QHBoxLayout()
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("搜索应用或窗口标题")
+        self.search_input.setPlaceholderText(tr("搜索应用或窗口标题", "Search apps or window titles"))
         self.category_filter = QComboBox()
-        for key, label in CATEGORIES.items():
-            self.category_filter.addItem(label, key)
+        for key, labels in CATEGORY_LABELS.items():
+            self.category_filter.addItem(tr(*labels), key)
         controls.addWidget(self.search_input, 1)
         controls.addWidget(self.category_filter)
         card = QFrame()
@@ -96,11 +109,16 @@ class TimelinePage(QWidget):
         total_seconds = sum(max(item.duration_seconds, 0) for item in today_usage)
         today_apps = len({item.app_name for item in today_usage})
         today_notes = len(self.database.get_manual_notes_by_date(today_str()))
-        self.stats_label.setText(f"今日：{human_duration(total_seconds)} · {today_apps} 个应用 · {today_notes} 条手动记录")
+        self.stats_label.setText(
+            tr(
+                f"今日：{human_duration(total_seconds)} · {today_apps} 个应用 · {today_notes} 条手动记录",
+                f"Today: {human_duration(total_seconds)} · {today_apps} apps · {today_notes} notes",
+            )
+        )
         sessions = [item for item in merge_activity_sessions(self.database.get_recent_app_usage(limit=5000)) if (not query or query in f"{item.app_name} {item.title}".lower()) and (category == "all" or item.category == category)]
         matching_notes = self.database.search_manual_notes(query) if query else []
         if not sessions and not matching_notes:
-            self.rows_layout.addWidget(QLabel("没有符合条件的活动记录。"))
+            self.rows_layout.addWidget(QLabel(tr("没有符合条件的活动记录。", "No matching activity.")))
             return
         # Keep the live widget tree bounded. The full history remains queryable,
         # while only the most relevant recent matches need to be painted.
@@ -111,7 +129,7 @@ class TimelinePage(QWidget):
             when = QLabel(f"{session.date}\n{display_time(session.start_time)}")
             text = QLabel(session.app_name + (f"\n{session.title}" if session.title else ""))
             text.setWordWrap(True)
-            badge = QLabel(CATEGORIES[session.category])
+            badge = QLabel(tr(*CATEGORY_LABELS[session.category]))
             badge.setObjectName("recordingStatus")
             layout.addWidget(when)
             layout.addWidget(text, 1)
@@ -123,9 +141,9 @@ class TimelinePage(QWidget):
             row.setObjectName("quietCard")
             layout = QHBoxLayout(row)
             when = QLabel(f"{note.date}\n{display_time(note.created_at)}")
-            text = QLabel(f"手动记录\n{note.content}")
+            text = QLabel(tr(f"手动记录\n{note.content}", f"Manual note\n{note.content}"))
             text.setWordWrap(True)
-            badge = QLabel("笔记")
+            badge = QLabel(tr("笔记", "Note"))
             badge.setObjectName("recordingStatus")
             layout.addWidget(when)
             layout.addWidget(text, 1)

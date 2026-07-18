@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 from src.database.db import Database
 from src.database.models import ManualNote
+from src.i18n import tr
 from src.utils.time_utils import display_time, today_str
 
 
@@ -24,9 +25,9 @@ class NotesPage(QWidget):
         root.setSpacing(18)
         root.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        title = QLabel("一句话")
+        title = QLabel(tr("一句话", "Notes"))
         title.setObjectName("pageTitle")
-        subtitle = QLabel("这里会保存你主动留下的关键句子。")
+        subtitle = QLabel(tr("这里会保存你主动留下的关键句子。", "The notes you choose to leave are kept here."))
         subtitle.setObjectName("storyBody")
         subtitle.setWordWrap(True)
 
@@ -36,7 +37,7 @@ class NotesPage(QWidget):
         card_layout.setContentsMargins(24, 22, 24, 22)
         card_layout.setSpacing(12)
 
-        section = QLabel("今天留下的句子")
+        section = QLabel(tr("今天留下的句子", "Today's notes"))
         section.setObjectName("sectionLabel")
         self.notes_box = QVBoxLayout()
         self.notes_box.setSpacing(10)
@@ -58,7 +59,7 @@ class NotesPage(QWidget):
     def _render_notes(self, notes: list[ManualNote]) -> None:
         self._clear_layout(self.notes_box)
         if not notes:
-            empty = QLabel("今天还没有留下主动记录。")
+            empty = QLabel(tr("今天还没有留下主动记录。", "You have not left a note today."))
             empty.setObjectName("storyBody")
             self.notes_box.addWidget(empty)
             return

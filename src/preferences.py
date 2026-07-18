@@ -18,6 +18,9 @@ class Preferences:
         "1password", "bitwarden", "keepass", "inprivate", "无痕",
     )
     idle_minutes: int = 5
+    language: str = "zh-CN"
+    ai_enabled: bool = False
+    ai_include_notes: bool = False
 
 
 def load_preferences(path: Path = PREFERENCES_PATH) -> Preferences:
@@ -31,7 +34,16 @@ def load_preferences(path: Path = PREFERENCES_PATH) -> Preferences:
             if str(item).strip()
         )
         idle_minutes = max(1, min(int(data.get("idle_minutes", 5)), 120))
-        return Preferences(keywords or Preferences().excluded_keywords, idle_minutes)
+        language = str(data.get("language", "zh-CN"))
+        if language not in {"zh-CN", "en"}:
+            language = "zh-CN"
+        return Preferences(
+            excluded_keywords=keywords or Preferences().excluded_keywords,
+            idle_minutes=idle_minutes,
+            language=language,
+            ai_enabled=bool(data.get("ai_enabled", False)),
+            ai_include_notes=bool(data.get("ai_include_notes", False)),
+        )
     except Exception:
         logger.exception("Failed to load preferences; defaults will be used.")
         return Preferences()

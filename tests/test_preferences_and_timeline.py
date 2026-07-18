@@ -26,6 +26,19 @@ class PreferencesAndTimelineTests(unittest.TestCase):
             path.write_text('{"excluded_keywords": ["x"], "idle_minutes": 999}', encoding="utf-8")
             self.assertEqual(load_preferences(path).idle_minutes, 120)
 
+    def test_language_and_ai_preferences_round_trip(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "preferences.json"
+            expected = Preferences(
+                excluded_keywords=("secret",),
+                idle_minutes=8,
+                language="en",
+                ai_enabled=True,
+                ai_include_notes=True,
+            )
+            save_preferences(expected, path)
+            self.assertEqual(load_preferences(path), expected)
+
     def test_adjacent_activity_sessions_are_merged(self):
         rows = [
             usage(1, "Code", "2026-07-13 10:00:00", "2026-07-13 10:05:00", 300),

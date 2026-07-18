@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.config import DATA_DIR
+from src.i18n import tr
 from src.utils.time_utils import today_str
 
 
@@ -36,7 +37,7 @@ class DiaryPage(QWidget):
         title_box.setSpacing(4)
         self.date_label = QLabel()
         self.date_label.setObjectName("dateLabel")
-        title = QLabel("今天被整理成了什么？")
+        title = QLabel(tr("今天被整理成了什么？", "What did today become?"))
         title.setObjectName("pageTitle")
         title_box.addWidget(self.date_label)
         title_box.addWidget(title)
@@ -52,7 +53,7 @@ class DiaryPage(QWidget):
         article.setContentsMargins(30, 28, 30, 28)
         article.setSpacing(16)
 
-        self.article_label = QLabel("AI 今日总结")
+        self.article_label = QLabel(tr("今日回顾", "Daily reflection"))
         self.article_label.setObjectName("sectionLabel")
         self.article_title = QLabel()
         self.article_title.setObjectName("storyTitle")
@@ -63,17 +64,17 @@ class DiaryPage(QWidget):
         self.editor = QPlainTextEdit()
         self.editor.setVisible(False)
         self.editor.setMinimumHeight(280)
-        self.generate_button = QPushButton("生成今日日报")
+        self.generate_button = QPushButton(tr("生成今日日报", "Generate today's reflection"))
         self.generate_button.setObjectName("primaryButton")
         self.generate_button.clicked.connect(self._request_generation)
-        self.edit_button = QPushButton("编辑日报")
+        self.edit_button = QPushButton(tr("编辑日报", "Edit reflection"))
         self.edit_button.setObjectName("secondaryButton")
         self.edit_button.clicked.connect(self._start_editing)
-        self.save_button = QPushButton("保存修改")
+        self.save_button = QPushButton(tr("保存修改", "Save changes"))
         self.save_button.setObjectName("primaryButton")
         self.save_button.setVisible(False)
         self.save_button.clicked.connect(self._save_edit)
-        self.week_button = QPushButton("生成本周周报")
+        self.week_button = QPushButton(tr("生成本周周报", "Generate weekly reflection"))
         self.week_button.setObjectName("secondaryButton")
         self.week_button.clicked.connect(self._generate_weekly_report)
         article_buttons = QHBoxLayout()
@@ -92,9 +93,9 @@ class DiaryPage(QWidget):
 
         lower = QHBoxLayout()
         lower.setSpacing(18)
-        self.state_card = self._small_card("AI 状态分析")
-        self.moments_card = self._small_card("关键瞬间")
-        self.raw_card = self._small_card("原始记录折叠区")
+        self.state_card = self._small_card(tr("状态分析", "State overview"))
+        self.moments_card = self._small_card(tr("关键瞬间", "Key moments"))
+        self.raw_card = self._small_card(tr("原始记录折叠区", "Local evidence"))
         lower.addWidget(self.state_card, 1)
         lower.addWidget(self.moments_card, 1)
         lower.addWidget(self.raw_card, 1)
@@ -110,25 +111,47 @@ class DiaryPage(QWidget):
 
     def set_date(self, date_text: str) -> None:
         self.selected_date = date_text
-        self.date_label.setText(f"{date_text} · Echo 日报")
+        self.date_label.setText(
+            tr(f"{date_text} · Echo 日报", f"{date_text} · Echo reflection")
+        )
         summary_path = self._summary_path(date_text)
         exists = summary_path.exists()
         self.edit_button.setVisible(exists and not self.editor.isVisible())
-        self.status_label.setText("AI 已生成 · 原始记录已折叠" if exists else "AI 日报尚未生成")
+        self.status_label.setText(
+            tr("日报已生成 · 原始记录已折叠", "Reflection ready · local evidence hidden")
+            if exists
+            else tr("日报尚未生成", "Reflection not generated")
+        )
         self.generate_button.setVisible(not exists or self._loading)
         if not exists:
             self.article_title.setText(
-                "今天的 AI 日报还没有生成"
+                tr("今天的日报还没有生成", "Today's reflection has not been generated")
                 if date_text == today_str()
-                else "这一天的 AI 日报还没有生成"
+                else tr("这一天的日报还没有生成", "This day's reflection has not been generated")
             )
             self.article_body.setText(
-                "生成后，这里会优先展示 AI 今日总结；原始窗口记录、心情记录和一句话会作为证据折叠在后面。"
+                tr(
+                    "生成时可以选择完全本地总结，或在确认脱敏预览后使用 GPT‑5.6 深度回顾。",
+                    "Choose a fully local summary, or use GPT‑5.6 after reviewing the sanitized preview.",
+                )
             )
-            self.generate_button.setText("生成今日日报" if date_text == today_str() else "生成该日日报")
-            self._set_card_body(self.state_card, "等待生成后分析今天的专注度、切换节奏和情绪线索。")
-            self._set_card_body(self.moments_card, "等待生成后提取今天值得回看的关键瞬间。")
-            self._set_card_body(self.raw_card, "原始记录会默认折叠，避免把日报页做成文件管理器。")
+            self.generate_button.setText(
+                tr("生成今日日报", "Generate today's reflection")
+                if date_text == today_str()
+                else tr("生成该日日报", "Generate this day's reflection")
+            )
+            self._set_card_body(
+                self.state_card,
+                tr("等待生成后分析今天的专注度、切换节奏和情绪线索。", "Generate a reflection to review focus and rhythm."),
+            )
+            self._set_card_body(
+                self.moments_card,
+                tr("等待生成后提取今天值得回看的关键瞬间。", "Generate a reflection to surface moments worth revisiting."),
+            )
+            self._set_card_body(
+                self.raw_card,
+                tr("原始记录始终保留在本地，并默认折叠。", "Raw records stay local and hidden by default."),
+            )
             return
 
         text = self._read_summary(summary_path)
@@ -136,24 +159,40 @@ class DiaryPage(QWidget):
         self.article_body.setText(self._extract_body(text))
         self._set_card_body(self.state_card, self._build_status_text(text))
         self._set_card_body(self.moments_card, self._build_moments_text(text))
-        self._set_card_body(self.raw_card, "窗口记录、心情记录和一句话仍保留在本地；这里默认折叠，只作为 AI 总结的证据。")
+        self._set_card_body(
+            self.raw_card,
+            tr(
+                "窗口记录、心情记录和一句话仍保留在本地；这里只展示整理后的结果。",
+                "Window activity, moods, and notes remain local; this page shows only the reflection.",
+            ),
+        )
 
     def set_loading(self, loading: bool) -> None:
         self._loading = loading
         self.generate_button.setEnabled(not loading)
         if loading:
-            self.generate_button.setText("正在整理今天...")
+            self.generate_button.setText(tr("正在整理今天...", "Reflecting on today..."))
         else:
-            self.generate_button.setText("生成今日日报" if self.selected_date == today_str() else "生成该日日报")
+            self.generate_button.setText(
+                tr("生成今日日报", "Generate today's reflection")
+                if self.selected_date == today_str()
+                else tr("生成该日日报", "Generate this day's reflection")
+            )
 
     def set_result(self, success: bool) -> None:
         self._loading = False
         self.generate_button.setEnabled(True)
-        self.generate_button.setText("生成今日日报" if self.selected_date == today_str() else "生成该日日报")
+        self.generate_button.setText(
+            tr("生成今日日报", "Generate today's reflection")
+            if self.selected_date == today_str()
+            else tr("生成该日日报", "Generate this day's reflection")
+        )
         self.refresh()
         if not success:
-            self.article_title.setText("日报生成失败")
-            self.article_body.setText("日报生成失败，请查看日志。")
+            self.article_title.setText(tr("日报生成失败", "Reflection failed"))
+            self.article_body.setText(
+                tr("日报生成失败，请查看日志。", "The reflection failed. Check the log.")
+            )
 
     def _request_generation(self) -> None:
         self.set_loading(True)
@@ -181,10 +220,14 @@ class DiaryPage(QWidget):
             self.article_body.setVisible(True)
             self.save_button.setVisible(False)
             self.set_date(self.selected_date)
-            QMessageBox.information(self, "Echo Recorder", "日报修改已保存在本机。")
+            QMessageBox.information(
+                self, "Echo Recorder", tr("日报修改已保存在本机。", "Changes were saved locally.")
+            )
         except Exception:
             logger.exception("Failed to save edited summary: %s", path)
-            QMessageBox.warning(self, "Echo Recorder", "日报保存失败，请查看日志。")
+            QMessageBox.warning(
+                self, "Echo Recorder", tr("日报保存失败，请查看日志。", "Could not save the reflection. Check the log.")
+            )
 
     def _generate_weekly_report(self) -> None:
         end = datetime.strptime(self.selected_date, "%Y-%m-%d").date()
@@ -200,7 +243,9 @@ class DiaryPage(QWidget):
             text = self._read_summary(path)
             sections.extend([f"## {day}", "", self._extract_body(text), ""])
         if not included:
-            QMessageBox.information(self, "Echo Recorder", "最近七天还没有可汇总的日报。")
+            QMessageBox.information(
+                self, "Echo Recorder", tr("最近七天还没有可汇总的日报。", "There are no reflections to combine from the last seven days.")
+            )
             return
         week_dir = DATA_DIR / "weekly"
         week_dir.mkdir(parents=True, exist_ok=True)
@@ -208,7 +253,11 @@ class DiaryPage(QWidget):
         temporary = output.with_suffix(".tmp")
         temporary.write_text("\n".join(sections).rstrip() + "\n", encoding="utf-8")
         temporary.replace(output)
-        QMessageBox.information(self, "Echo Recorder", f"周报已生成：\n{output}")
+        QMessageBox.information(
+            self,
+            "Echo Recorder",
+            tr(f"周报已生成：\n{output}", f"Weekly reflection created:\n{output}"),
+        )
 
     def _summary_path(self, date_text: str) -> Path:
         year, month, day = date_text.split("-")
@@ -249,20 +298,23 @@ class DiaryPage(QWidget):
         for line in text.splitlines():
             if line.startswith("# "):
                 return line.lstrip("# ").strip()
-        return "AI 今日总结"
+        return tr("今日回顾", "Daily reflection")
 
     def _extract_body(self, text: str) -> str:
         lines = [line.strip("#- ") for line in text.splitlines() if line.strip()]
         body = "\n".join(line for line in lines[1:8] if not line.startswith("##"))
-        return body or "今天的记录已经生成，Echo 会把它作为未来 AI 日报的素材。"
+        return body or tr(
+            "今天的记录已经生成，Echo 会把它作为未来回顾的素材。",
+            "Today's record is ready for future reflection.",
+        )
 
     def _build_status_text(self, text: str) -> str:
         if "VS Code" in text or "Code" in text:
-            return "今天的注意力偏向项目开发。AI 状态分析会在后续接入真实模型后进一步细化。"
-        return "今天的状态分析已根据本地日报展示；后续接入 AI 后会更自然地描述。"
+            return tr("今天的注意力偏向项目开发。", "Today's attention leaned toward project development.")
+        return tr("今天的状态根据日报内容整理。", "Today's state is summarized from the reflection.")
 
     def _build_moments_text(self, text: str) -> str:
         lines = [line for line in text.splitlines() if line.startswith("- ")]
         if not lines:
-            return "今天的关键瞬间还不够明确。"
+            return tr("今天的关键瞬间还不够明确。", "Today's key moments are not clear yet.")
         return "\n".join(lines[:3])

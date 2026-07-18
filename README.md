@@ -8,7 +8,8 @@ Echo Recorder is a privacy-first Windows desktop activity journal that helps peo
 - Presents a daily timeline and activity overview
 - Supports manual notes and mood journaling
 - Replays nearby activity and notes around a selected moment
-- Generates local daily summaries
+- Generates local daily reflections, with an optional privacy-reviewed GPT-5.6 mode
+- Switches between Simplified Chinese and English
 - Provides pause, exclusion, retention, and idle-time controls
 - Exports and backs up user-owned data
 
@@ -17,6 +18,8 @@ Echo Recorder is a privacy-first Windows desktop activity journal that helps peo
 Echo stores activity records, notes, preferences, and generated summaries under the local `data/` directory. These records are intentionally excluded from version control. Logs, screenshots, databases, photos, exports, environment files, and secrets must never be committed.
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) before sharing code or test material.
+
+The AI reflection feature is off by default. When enabled, Echo shows a sanitized preview before every request and sends nothing unless the user explicitly confirms. Window titles, filesystem paths, email addresses, URLs, photos, and raw activity records are excluded. Manual notes remain excluded unless the user separately opts in. The OpenAI API key is stored in Windows Credential Manager, not in the repository or preferences file.
 
 ## Requirements
 
@@ -34,6 +37,8 @@ python -m venv .venv
 ```
 
 Echo starts in the Windows system tray. Use the tray menu to open the main window, add a note, pause or resume recording, open the local data folder, or exit.
+
+Language and the optional AI reflection mode can be changed under **Settings**. Changing the language rebuilds the main window immediately without changing recorded data or the Memory layout.
 
 ## Run tests
 
@@ -57,4 +62,3 @@ Echo existed before the OpenAI Build Week submission period and has been meaning
 ## Repository status
 
 Echo is under active development. The repository is private and the code is currently all rights reserved.
-

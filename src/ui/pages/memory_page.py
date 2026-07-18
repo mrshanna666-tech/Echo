@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QAbstractSpinBox, QDateEdit, QFrame, QHBoxLayout, 
 
 from src.database.db import Database
 from src.database.models import AppUsage, ManualNote
+from src.i18n import tr
 from src.ui.pages.timeline_page import merge_activity_sessions
 from src.utils.time_utils import display_time, today_str
 
@@ -56,7 +57,7 @@ class MemoryFragmentCard(QFrame):
         meta = QHBoxLayout()
         when = QLabel(f"{date_text} · {time_text}")
         when.setObjectName("fragmentMeta")
-        category = QLabel("工作")
+        category = QLabel(tr("工作", "Work"))
         category.setObjectName("orangeSmall")
         meta.addWidget(when)
         meta.addStretch()
@@ -222,13 +223,13 @@ class MemoryPage(QWidget):
         header = QHBoxLayout()
         title_box = QVBoxLayout()
         title_box.setSpacing(3)
-        title = QLabel("记忆")
+        title = QLabel(tr("记忆", "Memory"))
         title.setObjectName("pageTitle")
-        subtitle = QLabel("不是回看数据，而是重新想起那一刻。")
+        subtitle = QLabel(tr("不是回看数据，而是重新想起那一刻。", "Not just data—return to the moment."))
         subtitle.setObjectName("memorySubtitle")
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
-        privacy = QLabel("仅本机 · 私密回放")
+        privacy = QLabel(tr("仅本机 · 私密回放", "On-device · Private replay"))
         privacy.setObjectName("memoryPrivacy")
         header.addLayout(title_box)
         header.addStretch()
@@ -242,22 +243,22 @@ class MemoryPage(QWidget):
         picker_layout.setSpacing(12)
         picker_copy = QVBoxLayout()
         picker_copy.setSpacing(2)
-        picker_title = QLabel("回到某一刻")
+        picker_title = QLabel(tr("回到某一刻", "Return to a moment"))
         picker_title.setObjectName("sectionLabel")
-        picker_hint = QLabel("选择时间，重建前后 30 分钟的上下文")
+        picker_hint = QLabel(tr("选择时间，重建前后 30 分钟的上下文", "Choose a time to rebuild the surrounding context"))
         picker_hint.setObjectName("mutedSmall")
         picker_copy.addWidget(picker_title)
         picker_copy.addWidget(picker_hint)
         self.date_edit = QDateEdit(QDate.currentDate())
         self.date_edit.setObjectName("memoryDateEdit")
         self.date_edit.setCalendarPopup(True)
-        self.date_edit.setDisplayFormat("yyyy年M月d日")
+        self.date_edit.setDisplayFormat(tr("yyyy年M月d日", "MMM d, yyyy"))
         self.time_edit = QTimeEdit(QTime.currentTime())
         self.time_edit.setObjectName("memoryTimeEdit")
         self.time_edit.setDisplayFormat("HH:mm")
         self.time_edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
-        self.time_edit.setToolTip("点击小时或分钟后输入，也可以使用鼠标滚轮调整")
-        self.replay_button = QPushButton("回到这一刻  →")
+        self.time_edit.setToolTip(tr("点击小时或分钟后输入，也可以使用鼠标滚轮调整", "Select hours or minutes to type, or use the mouse wheel"))
+        self.replay_button = QPushButton(tr("回到这一刻  →", "Return to this moment  →"))
         self.replay_button.setObjectName("memoryReplayButton")
         self.replay_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.replay_button.setMinimumHeight(42)
@@ -281,9 +282,9 @@ class MemoryPage(QWidget):
         fragments_layout.setContentsMargins(0, 0, 0, 0)
         fragments_layout.setSpacing(10)
         fragments_head = QHBoxLayout()
-        fragments_title = QLabel("记忆片段")
+        fragments_title = QLabel(tr("记忆片段", "Memory fragments"))
         fragments_title.setObjectName("sectionLabel")
-        fragments_hint = QLabel("按日期浏览")
+        fragments_hint = QLabel(tr("按日期浏览", "Browse by date"))
         fragments_hint.setObjectName("mutedSmall")
         fragments_head.addWidget(fragments_title)
         fragments_head.addStretch()
@@ -300,7 +301,7 @@ class MemoryPage(QWidget):
         self.fragments_box.setAlignment(Qt.AlignmentFlag.AlignTop)
         fragment_scroll.setWidget(self.fragments_content)
         fragments_layout.addWidget(fragment_scroll, 1)
-        more = QPushButton("查看更多早期记忆 ↓")
+        more = QPushButton(tr("查看更多早期记忆 ↓", "Show earlier memories ↓"))
         more.setObjectName("memoryLinkButton")
         more.clicked.connect(lambda: self.report_requested.emit(self.selected_date))
         fragments_layout.addWidget(more, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -311,7 +312,7 @@ class MemoryPage(QWidget):
         detail_layout.setContentsMargins(24, 20, 24, 22)
         detail_layout.setSpacing(13)
         detail_head = QHBoxLayout()
-        detail_title = QLabel("时光回放")
+        detail_title = QLabel(tr("时光回放", "Memory replay"))
         detail_title.setObjectName("reportTitle")
         self.range_label = QLabel()
         self.range_label.setObjectName("fragmentMeta")
@@ -334,7 +335,7 @@ class MemoryPage(QWidget):
         story_layout.addWidget(self.story_title)
         story_layout.addWidget(self.story_body)
         detail_layout.addWidget(self.story_card)
-        trail_label = QLabel("应用轨迹")
+        trail_label = QLabel(tr("应用轨迹", "Application trail"))
         trail_label.setObjectName("mutedSmall")
         detail_layout.addWidget(trail_label)
         self.trail_row = QHBoxLayout()
@@ -356,13 +357,13 @@ class MemoryPage(QWidget):
         detail_layout.addWidget(self.note_card)
         actions = QHBoxLayout()
         actions.setSpacing(9)
-        self.favorite_button = QPushButton("收藏这段记忆")
+        self.favorite_button = QPushButton(tr("收藏这段记忆", "Favorite this memory"))
         self.favorite_button.setObjectName("primaryButton")
         self.favorite_button.clicked.connect(self._toggle_favorite)
-        expand_button = QPushButton("前后 30 分钟")
+        expand_button = QPushButton(tr("前后 30 分钟", "± 30 minutes"))
         expand_button.setObjectName("memoryOutlineButton")
         expand_button.clicked.connect(self._expand_window)
-        report_button = QPushButton("继续这件事")
+        report_button = QPushButton(tr("继续这件事", "Continue this"))
         report_button.setObjectName("memoryOutlineButton")
         report_button.clicked.connect(lambda: self.report_requested.emit(self.selected_date))
         actions.addWidget(self.favorite_button)
@@ -370,7 +371,7 @@ class MemoryPage(QWidget):
         actions.addWidget(report_button)
         actions.addStretch()
         detail_layout.addLayout(actions)
-        local_hint = QLabel("所有内容都由本地活动记录、笔记与心情整理而成。")
+        local_hint = QLabel(tr("所有内容都由本地活动记录、笔记与心情整理而成。", "Everything here is reconstructed from local activity, notes, and moods."))
         local_hint.setObjectName("mutedSmall")
         detail_layout.addWidget(local_hint)
         detail_layout.addStretch()
@@ -432,11 +433,11 @@ class MemoryPage(QWidget):
             if sessions:
                 start, end = display_time(sessions[0].start_time), display_time(sessions[-1].end_time or sessions[-1].start_time)
                 title = notes[-1].content if notes else self._fragment_title(apps)
-                trail = " → ".join(apps[:3]) or "本地活动记录"
+                trail = " → ".join(apps[:3]) or tr("本地活动记录", "Local activity")
             else:
                 start = end = "--:--"
-                title = notes[-1].content if notes else "等待形成新的记忆"
-                trail = "这一刻还没有足够的上下文"
+                title = notes[-1].content if notes else tr("等待形成新的记忆", "Waiting for a new memory")
+                trail = tr("这一刻还没有足够的上下文", "Not enough context around this moment")
             card = MemoryFragmentCard(date_text, f"{start}–{end}", title, trail, date_text == self.selected_date)
             card.clicked.connect(self._select_fragment)
             self.fragments_box.addWidget(card)
@@ -451,25 +452,47 @@ class MemoryPage(QWidget):
             for session in sessions:
                 if session.app_name and session.app_name not in apps: apps.append(session.app_name)
             start, end = center - timedelta(minutes=self._window_minutes), center + timedelta(minutes=self._window_minutes)
-            self.range_label.setText(f"{start:%H:%M}–{end:%H:%M} · {self._window_minutes * 2}分钟")
+            self.range_label.setText(
+                tr(
+                    f"{start:%H:%M}–{end:%H:%M} · {self._window_minutes * 2}分钟",
+                    f"{start:%H:%M}–{end:%H:%M} · {self._window_minutes * 2} min",
+                )
+            )
             if usages or notes:
-                focus = apps[0] if apps else "这件事"
-                self.story_title.setText(f"你正在专注于 {focus}")
-                sequence = "、".join(apps[:3]) if apps else "手动记录"
-                note_sentence = f"期间留下了“{notes[-1].content}”。" if notes else "这段时间没有留下手动备注。"
-                self.story_body.setText(f"这一小时的上下文主要由 {sequence} 组成，共捕捉到 {len(sessions)} 段连续活动。{note_sentence}")
+                focus = apps[0] if apps else tr("这件事", "this activity")
+                self.story_title.setText(tr(f"你正在专注于 {focus}", f"You were focused on {focus}"))
+                sequence = tr("、", ", ").join(apps[:3]) if apps else tr("手动记录", "a manual note")
+                note_sentence = (
+                    tr(f"期间留下了“{notes[-1].content}”。", f'You left the note “{notes[-1].content}”.')
+                    if notes
+                    else tr("这段时间没有留下手动备注。", "No manual note was left during this time.")
+                )
+                self.story_body.setText(
+                    tr(
+                        f"这一小时的上下文主要由 {sequence} 组成，共捕捉到 {len(sessions)} 段连续活动。{note_sentence}",
+                        f"This hour was mainly made up of {sequence}, across {len(sessions)} continuous sessions. {note_sentence}",
+                    )
+                )
             else:
-                self.story_title.setText("这一刻还很安静")
-                self.story_body.setText("所选时间附近没有足够的活动记录。换一个时间，Echo 会带你回到更清晰的一刻。")
+                self.story_title.setText(tr("这一刻还很安静", "This moment is still quiet"))
+                self.story_body.setText(tr("所选时间附近没有足够的活动记录。换一个时间，Echo 会带你回到更清晰的一刻。", "There is not enough activity around the selected time. Try another moment."))
             self._render_trail(apps)
-            self.note_time.setText(f"{display_time(notes[-1].created_at)} · 留下一句话" if notes else "这一刻 · 上下文线索")
-            self.note_body.setText(notes[-1].content if notes else "没有一句话也没关系，应用切换本身已经构成了这段记忆的轨迹。")
+            self.note_time.setText(
+                tr(f"{display_time(notes[-1].created_at)} · 留下一句话", f"{display_time(notes[-1].created_at)} · Note")
+                if notes
+                else tr("这一刻 · 上下文线索", "This moment · Context")
+            )
+            self.note_body.setText(
+                notes[-1].content
+                if notes
+                else tr("没有一句话也没关系，应用切换本身已经构成了这段记忆的轨迹。", "Even without a note, application changes form a trail through this memory.")
+            )
         except Exception:
             logger.exception("Failed to render memory replay: %s", self.selected_date)
 
     def _render_trail(self, apps: list[str]) -> None:
         self._clear_layout(self.trail_row)
-        for app in apps[:5] or ["暂无轨迹"]:
+        for app in apps[:5] or [tr("暂无轨迹", "No activity trail")]:
             tag = QLabel(app)
             tag.setObjectName("memoryTrailTag")
             self.trail_row.addWidget(tag)
@@ -477,7 +500,11 @@ class MemoryPage(QWidget):
 
     def _toggle_favorite(self) -> None:
         self._favorite = not self._favorite
-        self.favorite_button.setText("已收藏" if self._favorite else "收藏这段记忆")
+        self.favorite_button.setText(
+            tr("已收藏", "Favorited")
+            if self._favorite
+            else tr("收藏这段记忆", "Favorite this memory")
+        )
         self.favorite_button.setProperty("saved", self._favorite)
         self.favorite_button.style().unpolish(self.favorite_button)
         self.favorite_button.style().polish(self.favorite_button)
@@ -488,8 +515,13 @@ class MemoryPage(QWidget):
 
     @staticmethod
     def _fragment_title(apps: list[str]) -> str:
-        if not apps: return "等待形成新的记忆"
-        return f"专注使用 {apps[0]}" if len(apps) == 1 else "完成一段连续的工作"
+        if not apps:
+            return tr("等待形成新的记忆", "Waiting for a new memory")
+        return (
+            tr(f"专注使用 {apps[0]}", f"Focused on {apps[0]}")
+            if len(apps) == 1
+            else tr("完成一段连续的工作", "Completed a continuous work session")
+        )
 
     @staticmethod
     def _clear_layout(layout) -> None:

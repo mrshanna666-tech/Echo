@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from src.i18n import tr
+
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 DATE_FORMAT = "%Y-%m-%d"
@@ -37,12 +39,12 @@ def duration_seconds(start: datetime, end: datetime) -> int:
 
 def human_duration(seconds: int | None) -> str:
     if not seconds:
-        return "不到 1 分钟"
+        return tr("不到 1 分钟", "under 1 min")
     delta = timedelta(seconds=seconds)
     total_minutes = max(int(delta.total_seconds() // 60), 1)
     hours, minutes = divmod(total_minutes, 60)
     if hours and minutes:
-        return f"{hours}小时{minutes}分钟"
+        return tr(f"{hours}小时{minutes}分钟", f"{hours}h {minutes}m")
     if hours:
-        return f"{hours}小时"
-    return f"{minutes}分钟"
+        return tr(f"{hours}小时", f"{hours}h")
+    return tr(f"{minutes}分钟", f"{minutes}m")

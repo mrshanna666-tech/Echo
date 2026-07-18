@@ -8,6 +8,7 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QStyle, QSystemTrayIcon
 
 from src.config import APP_NAME, DATA_DIR
+from src.i18n import tr
 from src.utils.resources import echo_icon_path
 
 
@@ -26,18 +27,18 @@ class TrayController(QObject):
     def __init__(self) -> None:
         super().__init__()
         self.tray = QSystemTrayIcon()
-        self.tray.setToolTip("Echo 正在记录...")
+        self.tray.setToolTip(tr("Echo 正在记录...", "Echo is recording..."))
         self.tray.setIcon(self._default_icon())
 
         self.menu = QMenu()
-        self.show_today_action = QAction("查看今天")
-        self.add_note_action = QAction("添加一句话")
-        self.generate_summary_action = QAction("生成今天日报")
-        self.open_summary_action = QAction("打开今天日报")
-        self.pause_action = QAction("暂停记录")
-        self.resume_action = QAction("恢复记录")
-        self.open_data_action = QAction("打开数据文件夹")
-        self.quit_action = QAction("退出")
+        self.show_today_action = QAction(tr("查看今天", "Open Today"))
+        self.add_note_action = QAction(tr("添加一句话", "Add a note"))
+        self.generate_summary_action = QAction(tr("生成今天日报", "Generate today's reflection"))
+        self.open_summary_action = QAction(tr("打开今天日报", "Open today's reflection"))
+        self.pause_action = QAction(tr("暂停记录", "Pause recording"))
+        self.resume_action = QAction(tr("恢复记录", "Resume recording"))
+        self.open_data_action = QAction(tr("打开数据文件夹", "Open data folder"))
+        self.quit_action = QAction(tr("退出", "Quit"))
 
         self.menu.addAction(self.show_today_action)
         self.menu.addAction(self.add_note_action)
@@ -63,12 +64,23 @@ class TrayController(QObject):
         self.quit_action.triggered.connect(self.quit_requested.emit)
         self.tray.activated.connect(self._on_activated)
 
+    def retranslate(self) -> None:
+        self.show_today_action.setText(tr("查看今天", "Open Today"))
+        self.add_note_action.setText(tr("添加一句话", "Add a note"))
+        self.generate_summary_action.setText(tr("生成今天日报", "Generate today's reflection"))
+        self.open_summary_action.setText(tr("打开今天日报", "Open today's reflection"))
+        self.pause_action.setText(tr("暂停记录", "Pause recording"))
+        self.resume_action.setText(tr("恢复记录", "Resume recording"))
+        self.open_data_action.setText(tr("打开数据文件夹", "Open data folder"))
+        self.quit_action.setText(tr("退出", "Quit"))
+        self.tray.setToolTip(tr("Echo 正在记录...", "Echo is recording..."))
+
     def show(self) -> None:
         try:
             self.tray.show()
             self.tray.showMessage(
                 APP_NAME,
-                "Echo 正在后台安静记录。",
+                tr("Echo 正在后台安静记录。", "Echo is recording quietly in the background."),
                 QSystemTrayIcon.MessageIcon.Information,
                 2500,
             )
@@ -78,11 +90,11 @@ class TrayController(QObject):
     def set_paused(self, paused: bool) -> None:
         try:
             if paused:
-                self.tray.setToolTip("Echo 已暂停记录")
+                self.tray.setToolTip(tr("Echo 已暂停记录", "Echo recording is paused"))
                 self.pause_action.setVisible(False)
                 self.resume_action.setVisible(True)
             else:
-                self.tray.setToolTip("Echo 正在记录...")
+                self.tray.setToolTip(tr("Echo 正在记录...", "Echo is recording..."))
                 self.pause_action.setVisible(True)
                 self.resume_action.setVisible(False)
         except Exception:

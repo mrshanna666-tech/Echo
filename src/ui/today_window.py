@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from src.config import DATA_DIR
 from src.database.db import Database
 from src.database.models import AppUsage, ManualNote
+from src.i18n import tr
 from src.mood.local_mood_journal import MoodEntry, get_mood_entries_by_date
 from src.summary.local_summary_generator import get_today_summary_path
 from src.ui.mood_drawer import MoodDrawer
@@ -79,7 +80,7 @@ class TodayReviewDialog(QDialog):
     def __init__(self, app_usage: list[AppUsage], notes: list[ManualNote], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("reviewDialog")
-        self.setWindowTitle("回顾今天")
+        self.setWindowTitle(tr("回顾今天", "Review today"))
         self.setModal(True)
         self.resize(520, 420)
         self._cards = self._build_cards(app_usage, notes)
@@ -99,11 +100,11 @@ class TodayReviewDialog(QDialog):
 
         buttons = QHBoxLayout()
         buttons.setSpacing(10)
-        self.prev_button = QPushButton("上一张")
+        self.prev_button = QPushButton(tr("上一张", "Previous"))
         self.prev_button.setObjectName("secondaryButton")
-        self.next_button = QPushButton("下一张")
+        self.next_button = QPushButton(tr("下一张", "Next"))
         self.next_button.setObjectName("primaryButton")
-        close_button = QPushButton("关闭")
+        close_button = QPushButton(tr("关闭", "Close"))
         close_button.setObjectName("secondaryButton")
         self.prev_button.clicked.connect(self._previous)
         self.next_button.clicked.connect(self._next)
@@ -123,21 +124,34 @@ class TodayReviewDialog(QDialog):
     def _build_cards(self, app_usage: list[AppUsage], notes: list[ManualNote]) -> list[tuple[str, str]]:
         total = sum(max(usage.duration_seconds or 0, 0) for usage in app_usage)
         software_count = len({usage.app_name for usage in app_usage if usage.app_name})
-        top_app = self._top_app(app_usage) or "暂无"
-        latest_note = notes[-1].content if notes else "今天还没有留下主动记录。"
-        story = "今天还在积累记录。" if not app_usage and not notes else "今天的记录已经开始形成一条可以回看的主线。"
+        top_app = self._top_app(app_usage) or tr("暂无", "None")
+        latest_note = notes[-1].content if notes else tr("今天还没有留下主动记录。", "No manual note was left today.")
+        story = (
+            tr("今天还在积累记录。", "Today is still accumulating records.")
+            if not app_usage and not notes
+            else tr("今天的记录已经开始形成一条可以回看的主线。", "Today's records are beginning to form a story you can revisit.")
+        )
         return [
             (
-                "今日记录概览",
-                f"今日记录 {human_duration(total)}，涉及 {software_count} 个软件，留下 {len(notes)} 条手动记录。",
+                tr("今日记录概览", "Today's overview"),
+                tr(
+                    f"今日记录 {human_duration(total)}，涉及 {software_count} 个软件，留下 {len(notes)} 条手动记录。",
+                    f"Recorded {human_duration(total)} across {software_count} apps, with {len(notes)} manual notes.",
+                ),
             ),
             (
-                "最长使用的应用",
-                f"今天最明显的线索是 {top_app}。这不一定代表结论，但它说明今天的注意力主要停留在哪里。",
+                tr("最长使用的应用", "Most-used app"),
+                tr(
+                    f"今天最明显的线索是 {top_app}。这不一定代表结论，但它说明今天的注意力主要停留在哪里。",
+                    f"The clearest clue today is {top_app}. It is not a conclusion, but it shows where your attention spent the most time.",
+                ),
             ),
             (
-                "今天值得记住",
-                f"一句话：{latest_note}\n\n今日主线：{story}",
+                tr("今天值得记住", "Worth remembering"),
+                tr(
+                    f"一句话：{latest_note}\n\n今日主线：{story}",
+                    f"Note: {latest_note}\n\nToday's thread: {story}",
+                ),
             ),
         ]
 
@@ -159,7 +173,12 @@ class TodayReviewDialog(QDialog):
 
     def _render(self) -> None:
         title, body = self._cards[self._index]
-        self.eyebrow.setText(f"回顾今天 · {self._index + 1} / {len(self._cards)}")
+        self.eyebrow.setText(
+            tr(
+                f"回顾今天 · {self._index + 1} / {len(self._cards)}",
+                f"Review today · {self._index + 1} / {len(self._cards)}",
+            )
+        )
         self.title.setText(title)
         self.body.setText(body)
         self.prev_button.setEnabled(self._index > 0)
@@ -217,7 +236,7 @@ class SummaryDetailDialog(QDialog):
         super().__init__(parent)
         self.summary_path = summary_path
         self.setObjectName("summaryDialog")
-        self.setWindowTitle("Echo 日报")
+        self.setWindowTitle(tr("Echo 日报", "Echo reflection"))
         self.resize(760, 620)
 
         layout = QVBoxLayout(self)
@@ -228,11 +247,11 @@ class SummaryDetailDialog(QDialog):
         title_box = QVBoxLayout()
         date_label = QLabel(today_str())
         date_label.setObjectName("sectionLabel")
-        title = QLabel("Echo 日报")
+        title = QLabel(tr("Echo 日报", "Echo reflection"))
         title.setObjectName("reviewTitle")
         title_box.addWidget(date_label)
         title_box.addWidget(title)
-        markdown_tag = QLabel("本地 Markdown")
+        markdown_tag = QLabel(tr("本地 Markdown", "Local Markdown"))
         markdown_tag.setObjectName("categoryTag")
         header.addLayout(title_box)
         header.addStretch()
@@ -247,9 +266,9 @@ class SummaryDetailDialog(QDialog):
             self.editor.setPlainText(summary_path.read_text(encoding="utf-8-sig"))
 
         buttons = QHBoxLayout()
-        open_file_button = QPushButton("用默认编辑器打开")
+        open_file_button = QPushButton(tr("用默认编辑器打开", "Open in default editor"))
         open_file_button.setObjectName("primaryButton")
-        close_button = QPushButton("关闭")
+        close_button = QPushButton(tr("关闭", "Close"))
         close_button.setObjectName("secondaryButton")
         open_file_button.clicked.connect(self._open_with_default_app)
         close_button.clicked.connect(self.accept)
@@ -267,7 +286,7 @@ class SummaryDetailDialog(QDialog):
             os.startfile(str(self.summary_path))
         except Exception:
             logger.exception("Failed to open summary with default app.")
-            QMessageBox.warning(self, "Echo Recorder", "打开默认编辑器失败，请查看日志。")
+            QMessageBox.warning(self, "Echo Recorder", tr("打开默认编辑器失败，请查看日志。", "Could not open the default editor. Check the log."))
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(
@@ -374,6 +393,7 @@ class TodayWindow(QWidget):
     add_note_requested = Signal()
     export_requested = Signal()
     clear_today_requested = Signal()
+    language_change_requested = Signal()
 
     def __init__(self, database: Database) -> None:
         super().__init__()
@@ -384,15 +404,15 @@ class TodayWindow(QWidget):
         self._timeline_generation = 0
         self._displayed_date = today_str()
         self._page_titles = {
-            "today": "今天",
-            "timeline": "时间线",
-            "diary": "日报",
-            "notes": "一句话",
+            "today": tr("今天", "Today"),
+            "timeline": tr("时间线", "Timeline"),
+            "diary": tr("日报", "Reflection"),
+            "notes": tr("一句话", "Notes"),
             "memory": "Memory",
-            "settings": "设置",
+            "settings": tr("设置", "Settings"),
         }
 
-        self.setWindowTitle("Echo - 今天")
+        self.setWindowTitle(tr("Echo - 今天", "Echo - Today"))
         self.setWindowIcon(QIcon(str(echo_icon_path())))
         # Keep a complete opaque backing store while Windows runs its native
         # move/resize loop; otherwise child-only painting can expose blanks.
@@ -448,7 +468,12 @@ class TodayWindow(QWidget):
                 self.memory_page.refresh()
         except Exception:
             logger.exception("Failed to refresh today window.")
-            self.today_status_body.setText("今天的记录暂时无法显示，但 Echo 会继续尝试记录。")
+            self.today_status_body.setText(
+                tr(
+                    "今天的记录暂时无法显示，但 Echo 会继续尝试记录。",
+                    "Today's records cannot be displayed right now, but Echo will keep recording.",
+                )
+            )
 
     def _check_date_rollover(self) -> None:
         current_date = today_str()
@@ -467,7 +492,11 @@ class TodayWindow(QWidget):
     def set_summary_result(self, success: bool) -> None:
         self._summary_loading = False
         self._summary_loading_timer.stop()
-        self.summary_status.setText("今天日报已生成" if success else "尚未生成")
+        self.summary_status.setText(
+            tr("今天日报已生成", "Today's reflection is ready")
+            if success
+            else tr("尚未生成", "Not generated")
+        )
         if hasattr(self, "diary_page"):
             self.diary_page.set_result(success)
 
@@ -477,7 +506,9 @@ class TodayWindow(QWidget):
                 return
             self.sidebar.set_active(key, emit=False)
             self.stack.setCurrentIndex(self._page_indexes[key])
-            self.setWindowTitle(f"Echo - {self._page_titles.get(key, '今天')}")
+            self.setWindowTitle(
+                f"Echo - {self._page_titles.get(key, tr('今天', 'Today'))}"
+            )
             if key == "notes":
                 self.notes_page.refresh()
             if key == "timeline":
@@ -547,6 +578,7 @@ class TodayWindow(QWidget):
         self.settings_page = SettingsPage()
         self.settings_page.export_requested.connect(self.export_requested.emit)
         self.settings_page.clear_today_requested.connect(self.clear_today_requested.emit)
+        self.settings_page.settings_changed.connect(self._settings_changed)
         self.timeline_scroll = self._wrap_page(self.timeline_page)
         self.diary_scroll = self._wrap_page(self.diary_page)
         self.notes_scroll = self._wrap_page(self.notes_page)
@@ -568,7 +600,7 @@ class TodayWindow(QWidget):
         header_text.setSpacing(4)
         self.date_label = QLabel()
         self.date_label.setObjectName("dateLabel")
-        title = QLabel("今天发生了什么？")
+        title = QLabel(tr("今天发生了什么？", "What happened today?"))
         title.setObjectName("pageTitle")
         header_text.addWidget(self.date_label)
         header_text.addWidget(title)
@@ -587,17 +619,17 @@ class TodayWindow(QWidget):
         self.timeline_card = self._card(hover=False)
         self.timeline_card.setObjectName("timelineCard")
         timeline_layout = self._card_layout(self.timeline_card, 20)
-        timeline_label = QLabel("今日时间线")
+        timeline_label = QLabel(tr("今日时间线", "Today's timeline"))
         timeline_label.setObjectName("sectionLabel")
         self.timeline_overview = QFrame()
         self.timeline_overview.setObjectName("timelineOverview")
         overview_layout = QHBoxLayout(self.timeline_overview)
         overview_layout.setContentsMargins(16, 14, 16, 14)
         overview_layout.setSpacing(16)
-        self.overview_window = self._overview_item("记录窗口")
-        self.overview_count = self._overview_item("记录条数")
-        self.overview_main_app = self._overview_item("主要应用")
-        self.overview_status = self._overview_item("今日状态")
+        self.overview_window = self._overview_item(tr("记录窗口", "Recorded window"))
+        self.overview_count = self._overview_item(tr("记录条数", "Entries"))
+        self.overview_main_app = self._overview_item(tr("主要应用", "Top app"))
+        self.overview_status = self._overview_item(tr("今日状态", "Today's state"))
         for item in [
             self.overview_window,
             self.overview_count,
@@ -606,7 +638,12 @@ class TodayWindow(QWidget):
         ]:
             overview_layout.addWidget(item, 1)
 
-        timeline_hint = QLabel("提示：今天页只保存原始记录，意义留给日报慢慢整理。")
+        timeline_hint = QLabel(
+            tr(
+                "提示：今天页只保存原始记录，意义留给日报慢慢整理。",
+                "Today keeps the raw evidence local; Reflection helps make sense of it.",
+            )
+        )
         timeline_hint.setObjectName("timelineHint")
         timeline_hint.setWordWrap(True)
         self.timeline_box = QVBoxLayout()
@@ -621,7 +658,7 @@ class TodayWindow(QWidget):
         side.setSpacing(18)
         self.memory_card = self._card()
         memory_layout = self._card_layout(self.memory_card, 22)
-        memory_label = QLabel("今日一句话")
+        memory_label = QLabel(tr("今日一句话", "Today's note"))
         memory_label.setObjectName("orangeLabel")
         self.memory_quote = QLabel()
         self.memory_quote.setObjectName("memoryQuote")
@@ -629,7 +666,7 @@ class TodayWindow(QWidget):
         self.memory_reason = QLabel()
         self.memory_reason.setObjectName("memoryReason")
         self.memory_reason.setWordWrap(True)
-        self.add_note_button = QPushButton("添加一句话")
+        self.add_note_button = QPushButton(tr("添加一句话", "Add a note"))
         self.add_note_button.setObjectName("smallButton")
         self.add_note_button.clicked.connect(self.add_note_requested.emit)
         memory_layout.addWidget(memory_label)
@@ -639,7 +676,7 @@ class TodayWindow(QWidget):
 
         self.status_card = self._card()
         status_layout = self._card_layout(self.status_card, 22)
-        status_label = QLabel("今日状态")
+        status_label = QLabel(tr("今日状态", "Today's state"))
         status_label.setObjectName("sectionLabel")
         self.today_status_body = QLabel()
         self.today_status_body.setObjectName("storyBody")
@@ -1043,10 +1080,14 @@ class TodayWindow(QWidget):
     ) -> None:
         self.date_label.setText(f"{today_str()} · {self._day_count_text()}")
         summary_exists = get_today_summary_path().exists()
-        self.summary_status.setText("今天日报已生成" if summary_exists else "尚未生成")
+        self.summary_status.setText(
+            tr("今天日报已生成", "Today's reflection is ready")
+            if summary_exists
+            else tr("尚未生成", "Not generated")
+        )
         self.recording_status.setText(self._recording_status_text(app_usage, notes, moods))
 
-        latest_note = notes[-1].content if notes else "今天还没有留下主动记录。"
+        latest_note = notes[-1].content if notes else tr("今天还没有留下主动记录。", "No note has been left today.")
         self.memory_quote.setText(f"“{latest_note}”" if notes else latest_note)
         self.memory_reason.setText(self._memory_reason(notes))
         self.today_status_body.setText(self._today_status_text(app_usage, notes, moods))
@@ -1065,16 +1106,22 @@ class TodayWindow(QWidget):
     ) -> None:
         entries_count = len(app_usage) + len(notes) + len(moods)
         self._set_overview_value(self.overview_window, self._record_window_text(app_usage, notes, moods))
-        self._set_overview_value(self.overview_count, f"{entries_count} 条")
-        self._set_overview_value(self.overview_main_app, self._top_app(app_usage) or "暂无")
+        self._set_overview_value(
+            self.overview_count,
+            tr(f"{entries_count} 条", f"{entries_count} entries"),
+        )
+        self._set_overview_value(
+            self.overview_main_app,
+            self._top_app(app_usage) or tr("暂无", "None"),
+        )
         if not entries_count:
-            status = "等待记录"
+            status = tr("等待记录", "Waiting")
         elif moods:
-            status = "有心情记录"
+            status = tr("有心情记录", "Mood captured")
         elif notes:
-            status = "有一句话"
+            status = tr("有一句话", "Note added")
         else:
-            status = "记录中"
+            status = tr("记录中", "Recording")
         self._set_overview_value(self.overview_status, status)
 
     def _set_overview_value(self, frame: QFrame, value: str) -> None:
@@ -1098,7 +1145,7 @@ class TodayWindow(QWidget):
         for mood in moods:
             values.append(mood.created_at)
         if not values:
-            return "暂无"
+            return tr("暂无", "None")
         values.sort()
         return f"{display_time(values[0])} - {display_time(values[-1])}"
 
@@ -1134,7 +1181,7 @@ class TodayWindow(QWidget):
             entries.append(("mood", mood.created_at, mood))
         entries.sort(key=lambda item: item[1])
         if not entries:
-            empty = QLabel("今天还没有记录。Echo 会在后台安静地记录这一天。")
+            empty = QLabel(tr("今天还没有记录。Echo 会在后台安静地记录这一天。", "No records yet. Echo will quietly record this day in the background."))
             empty.setObjectName("storyBody")
             empty.setWordWrap(True)
             self.timeline_box.addWidget(empty)
@@ -1174,20 +1221,20 @@ class TodayWindow(QWidget):
             usage = payload
             time_text = f"{display_time(usage.start_time)} - {display_time(usage.end_time)}"
             title = usage.app_name
-            detail = usage.window_title or "窗口活动"
+            detail = usage.window_title or tr("窗口活动", "Window activity")
             category = self._category_for_usage(usage)
         elif kind == "note":
             note = payload
             time_text = display_time(note.created_at)
-            title = "一句话"
+            title = tr("一句话", "Note")
             detail = note.content
-            category = "记录"
+            category = tr("记录", "Note")
         else:
             mood = payload
             time_text = display_time(mood.created_at)
-            title = f"心情记录 · {mood.mood}"
-            detail = mood.note or "此刻没有留下备注。"
-            category = "照片" if mood.image_path else ""
+            title = tr(f"心情记录 · {mood.mood}", f"Mood · {mood.mood}")
+            detail = mood.note or tr("此刻没有留下备注。", "No note was left for this moment.")
+            category = tr("照片", "Photo") if mood.image_path else ""
         time = QLabel(time_text)
         time.setObjectName("mutedSmall")
         time.setFixedWidth(104)
@@ -1241,10 +1288,14 @@ class TodayWindow(QWidget):
             self.diary_page.set_date(date_text)
             self.sidebar.set_active("diary", emit=False)
             self.stack.setCurrentIndex(self._page_indexes["diary"])
-            self.setWindowTitle("Echo - 日报")
+            self.setWindowTitle(tr("Echo - 日报", "Echo - Reflection"))
             self._fade_page(self.stack.currentWidget())
         except Exception:
             logger.exception("Failed to open diary for date: %s", date_text)
+
+    def _settings_changed(self, language_changed: bool) -> None:
+        if language_changed:
+            self.language_change_requested.emit()
 
     def _build_detail_panel(self) -> None:
         self.drawer_overlay = DrawerOverlay(self)
@@ -1261,7 +1312,7 @@ class TodayWindow(QWidget):
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        title_label = QLabel("时间线详情")
+        title_label = QLabel(tr("时间线详情", "Timeline details"))
         title_label.setObjectName("sectionLabel")
         close_button = QPushButton("×")
         close_button.setObjectName("drawerCloseButton")
@@ -1271,36 +1322,41 @@ class TodayWindow(QWidget):
         header.addStretch()
         header.addWidget(close_button)
 
-        self.detail_title = QLabel("选择一条记录")
+        self.detail_title = QLabel(tr("选择一条记录", "Select a record"))
         self.detail_title.setObjectName("detailTitle")
         self.detail_title.setWordWrap(True)
-        self.detail_body = QLabel("点击时间线中的记录后，这里会显示应用名称、时间、持续时长、类型标签和备注。")
+        self.detail_body = QLabel(
+            tr(
+                "点击时间线中的记录后，这里会显示应用名称、时间、持续时长、类型标签和备注。",
+                "Select a timeline record to see its app, time, duration, category, and note.",
+            )
+        )
         self.detail_body.setObjectName("storyBody")
         self.detail_body.setWordWrap(True)
-        self.detail_tag = QLabel("等待选择")
+        self.detail_tag = QLabel(tr("等待选择", "Waiting"))
         self.detail_tag.setObjectName("categoryTag")
-        note_label = QLabel("备注")
+        note_label = QLabel(tr("备注", "Note"))
         note_label.setObjectName("sectionLabel")
-        self.detail_note = QLabel("暂无额外备注。")
+        self.detail_note = QLabel(tr("暂无额外备注。", "No additional note."))
         self.detail_note.setObjectName("storyBody")
         self.detail_note.setWordWrap(True)
-        self.detail_photo_label = QLabel("照片状态")
+        self.detail_photo_label = QLabel(tr("照片状态", "Photo status"))
         self.detail_photo_label.setObjectName("sectionLabel")
-        self.detail_photo = QLabel("暂无照片")
+        self.detail_photo = QLabel(tr("暂无照片", "No photo"))
         self.detail_photo.setObjectName("photoPreview")
         self.detail_photo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.detail_photo.setFixedHeight(150)
-        path_label = QLabel("本地路径")
+        path_label = QLabel(tr("本地路径", "Local path"))
         path_label.setObjectName("sectionLabel")
-        self.detail_path = QLabel("无")
+        self.detail_path = QLabel(tr("无", "None"))
         self.detail_path.setObjectName("mutedSmall")
         self.detail_path.setWordWrap(True)
         detail_buttons = QHBoxLayout()
         detail_buttons.setSpacing(10)
-        self.view_photo_button = QPushButton("查看大图")
+        self.view_photo_button = QPushButton(tr("查看大图", "View photo"))
         self.view_photo_button.setObjectName("primaryButton")
         self.view_photo_button.clicked.connect(self._open_detail_photo)
-        self.open_photo_folder_button = QPushButton("打开所在文件夹")
+        self.open_photo_folder_button = QPushButton(tr("打开所在文件夹", "Open folder"))
         self.open_photo_folder_button.setObjectName("secondaryButton")
         self.open_photo_folder_button.clicked.connect(self._open_detail_photo_folder)
         detail_buttons.addWidget(self.view_photo_button)
@@ -1460,7 +1516,7 @@ class TodayWindow(QWidget):
             dialog.exec()
         except Exception:
             logger.exception("Failed to show summary detail dialog.")
-            QMessageBox.warning(self, "Echo Recorder", "打开今日日报失败，请查看日志。")
+            QMessageBox.warning(self, "Echo Recorder", tr("打开今日日报失败，请查看日志。", "Could not open today's reflection. See the log for details."))
 
     def _open_data_location(self) -> None:
         try:
@@ -1468,13 +1524,16 @@ class TodayWindow(QWidget):
             os.startfile(str(DATA_DIR))
         except Exception:
             logger.exception("Failed to open data location.")
-            QMessageBox.warning(self, "Echo Recorder", "打开数据位置失败，请查看日志。")
+            QMessageBox.warning(self, "Echo Recorder", tr("打开数据位置失败，请查看日志。", "Could not open the data folder. See the log for details."))
 
     def _show_clear_today_notice(self) -> None:
         QMessageBox.information(
             self,
             "Echo Recorder",
-            "清空今日记录需要更谨慎的删除逻辑，第一版先保留入口，不会直接删除你的本地数据。",
+            tr(
+                "清空今日记录需要更谨慎的删除逻辑，第一版先保留入口，不会直接删除你的本地数据。",
+                "Deleting today's records needs a safer confirmation flow. This version keeps the entry point but will not delete your local data.",
+            ),
         )
 
     def _show_timeline_detail(self, kind: str, payload: AppUsage | ManualNote | MoodEntry) -> None:
@@ -1487,29 +1546,35 @@ class TodayWindow(QWidget):
                 category = self._category_for_usage(usage)
                 self.detail_title.setText(usage.app_name or "Unknown")
                 self.detail_body.setText(
-                    "开始时间  {start}\n结束时间  {end}\n持续时长  {duration}".format(
+                    tr(
+                        "开始时间  {start}\n结束时间  {end}\n持续时长  {duration}",
+                        "Started  {start}\nEnded  {end}\nDuration  {duration}",
+                    ).format(
                         start=display_time(usage.start_time),
                         end=display_time(usage.end_time),
                         duration=human_duration(max(usage.duration_seconds or 0, 0)),
                     )
                 )
                 self.detail_tag.setText(category)
-                self.detail_note.setText(usage.window_title or "窗口活动")
+                self.detail_note.setText(usage.window_title or tr("窗口活动", "Window activity"))
                 self._set_detail_photo_state("none", "")
             elif kind == "mood":
                 mood = payload
-                self.detail_title.setText("心情记录")
-                self.detail_body.setText(f"时间  {display_time(mood.created_at)}")
-                self.detail_tag.setText(mood.mood or "平静")
-                self.detail_note.setText(mood.note or "此刻没有留下备注。")
+                self.detail_title.setText(tr("心情记录", "Mood"))
+                self.detail_body.setText(tr(f"时间  {display_time(mood.created_at)}", f"Time  {display_time(mood.created_at)}"))
+                self.detail_tag.setText(mood.mood or tr("平静", "Calm"))
+                self.detail_note.setText(mood.note or tr("此刻没有留下备注。", "No note was left for this moment."))
                 self._set_detail_photo_state("photo" if mood.image_path else "none", mood.image_path)
             else:
                 note = payload
-                self.detail_title.setText("手动记录")
+                self.detail_title.setText(tr("手动记录", "Manual note"))
                 self.detail_body.setText(
-                    f"记录时间  {display_time(note.created_at)}\n持续时长  不适用"
+                    tr(
+                        f"记录时间  {display_time(note.created_at)}\n持续时长  不适用",
+                        f"Recorded  {display_time(note.created_at)}\nDuration  Not applicable",
+                    )
                 )
-                self.detail_tag.setText("记录")
+                self.detail_tag.setText(tr("记录", "Note"))
                 self.detail_note.setText(note.content)
                 self._set_detail_photo_state("none", "")
             self._position_detail_panel(visible=True, animated=True)
@@ -1521,24 +1586,24 @@ class TodayWindow(QWidget):
 
     def _set_detail_photo_state(self, state: str, image_path: str) -> None:
         self._detail_photo_path = image_path or None
-        self.detail_path.setText(image_path or "无")
+        self.detail_path.setText(image_path or tr("无", "None"))
         self.view_photo_button.setEnabled(False)
         self.open_photo_folder_button.setEnabled(False)
         if not image_path:
             self.detail_photo.setPixmap(QPixmap())
-            self.detail_photo.setText("暂无照片")
+            self.detail_photo.setText(tr("暂无照片", "No photo"))
             return
         if image_path.startswith("encrypted:") or image_path.lower().endswith(".enc"):
             self.detail_photo.setPixmap(QPixmap())
-            self.detail_photo.setText("数据已加密，请先解锁")
+            self.detail_photo.setText(tr("数据已加密，请先解锁", "The data is encrypted. Unlock it first."))
             return
         if not os.path.exists(image_path):
             self.detail_photo.setPixmap(QPixmap())
-            self.detail_photo.setText("暂无照片")
+            self.detail_photo.setText(tr("暂无照片", "No photo"))
             return
         pixmap = QPixmap(image_path)
         if pixmap.isNull():
-            self.detail_photo.setText("暂无照片")
+            self.detail_photo.setText(tr("暂无照片", "No photo"))
             return
         self.detail_photo.setText("")
         self.detail_photo.setPixmap(
@@ -1560,7 +1625,7 @@ class TodayWindow(QWidget):
             os.startfile(path)
         except Exception:
             logger.exception("Failed to open mood photo: %s", path)
-            QMessageBox.warning(self, "Echo Recorder", "打开照片失败，请查看日志。")
+            QMessageBox.warning(self, "Echo Recorder", tr("打开照片失败，请查看日志。", "Could not open the photo. See the log for details."))
 
     def _open_detail_photo_folder(self) -> None:
         path = getattr(self, "_detail_photo_path", None)
@@ -1570,7 +1635,7 @@ class TodayWindow(QWidget):
             os.startfile(os.path.dirname(path))
         except Exception:
             logger.exception("Failed to open mood photo folder: %s", path)
-            QMessageBox.warning(self, "Echo Recorder", "打开所在文件夹失败，请查看日志。")
+            QMessageBox.warning(self, "Echo Recorder", tr("打开所在文件夹失败，请查看日志。", "Could not open the folder. See the log for details."))
 
     def _show_mood_drawer(self) -> None:
         try:
@@ -1580,7 +1645,7 @@ class TodayWindow(QWidget):
             self._position_mood_drawer(visible=True, animated=True)
         except Exception:
             logger.exception("Failed to show mood drawer.")
-            QMessageBox.warning(self, "Echo Recorder", "打开记录此刻失败，请查看日志。")
+            QMessageBox.warning(self, "Echo Recorder", tr("打开记录此刻失败，请查看日志。", "Could not open Capture this moment. See the log for details."))
 
     def _hide_mood_drawer(self) -> None:
         try:
@@ -1760,37 +1825,43 @@ class TodayWindow(QWidget):
 
     def _story_title(self, app_usage: list[AppUsage], notes: list[ManualNote]) -> str:
         if notes:
-            return "你把今天的一句话留给了未来的自己。"
+            return tr("你把今天的一句话留给了未来的自己。", "You left a note for your future self.")
         if app_usage:
-            return "Echo 正在把今天慢慢整理成可以回看的记忆。"
-        return "今天还没有展开，Echo 正在安静等待。"
+            return tr("Echo 正在把今天慢慢整理成可以回看的记忆。", "Echo is turning today into a memory you can revisit.")
+        return tr("今天还没有展开，Echo 正在安静等待。", "Today has not unfolded yet. Echo is waiting quietly.")
 
     def _story_body(self, app_usage: list[AppUsage], notes: list[ManualNote]) -> str:
         if notes:
-            return (
+            return tr(
                 "这一天重要的不是软件使用了多久，而是你主动留下了一个线索。\n"
-                "未来再回看时，这句话会比冷冰冰的统计更接近今天真正的意义。"
+                "未来再回看时，这句话会比冷冰冰的统计更接近今天真正的意义。",
+                "What matters is not only how long an app was open, but the clue you chose to leave.\n"
+                "That note may bring you closer to what today actually meant.",
             )
         if app_usage:
             top = self._top_app(app_usage)
-            return (
+            return tr(
                 f"今天的记录已经开始积累，{top or '一些软件'} 是目前最明显的线索。\n"
-                "这些数据不是结论，只是证据。Echo 会把它们放回今天的故事里。"
+                "这些数据不是结论，只是证据。Echo 会把它们放回今天的故事里。",
+                f"Today's record is taking shape, with {top or 'several apps'} as the clearest clue.\n"
+                "The data is evidence, not a conclusion.",
             )
-        return "今天还没有记录。Echo 会在后台安静地记录你把时间花在了哪里。"
+        return tr("今天还没有记录。Echo 会在后台安静地记录你把时间花在了哪里。", "There are no records yet. Echo will quietly capture where your time goes.")
 
     def _memory_reason(self, notes: list[ManualNote]) -> str:
         if notes:
-            return "这句话让今天不只是一组窗口切换，而是有了可以被未来理解的原因。"
-        return "主动写下的一句话，往往比自动记录更能说明今天为什么重要。"
+            return tr("这句话让今天不只是一组窗口切换，而是有了可以被未来理解的原因。", "This note gives the window changes a reason your future self can understand.")
+        return tr("主动写下的一句话，往往比自动记录更能说明今天为什么重要。", "A note often explains why today mattered better than automatic activity alone.")
 
     def _evidence_line(self, app_usage: list[AppUsage], notes: list[ManualNote]) -> str:
         total = sum(max(usage.duration_seconds or 0, 0) for usage in app_usage)
         software_count = len({usage.app_name for usage in app_usage})
-        top = self._top_app(app_usage) or "暂无"
-        return (
+        top = self._top_app(app_usage) or tr("暂无", "None")
+        return tr(
             f"今日记录 {human_duration(total)} · {software_count} 个软件 · "
-            f"{len(notes)} 条手动记录 · 最常用 {top}"
+            f"{len(notes)} 条手动记录 · 最常用 {top}",
+            f"Recorded {human_duration(total)} · {software_count} apps · "
+            f"{len(notes)} notes · most used: {top}",
         )
 
     def _recording_status_text(
@@ -1802,9 +1873,11 @@ class TodayWindow(QWidget):
         total = sum(max(usage.duration_seconds or 0, 0) for usage in app_usage)
         software_count = len({usage.app_name for usage in app_usage if usage.app_name})
         last_update = self._last_update_time(app_usage, notes, moods or [])
-        return (
+        return tr(
             f"正在记录 · 今日 {human_duration(total)} · "
-            f"{software_count} 个软件 · 最后更新 {last_update}"
+            f"{software_count} 个软件 · 最后更新 {last_update}",
+            f"Recording · {human_duration(total)} today · "
+            f"{software_count} apps · updated {last_update}",
         )
 
     def _today_status_text(
@@ -1814,12 +1887,12 @@ class TodayWindow(QWidget):
         moods: list[MoodEntry],
     ) -> str:
         if not app_usage and not notes and not moods:
-            return "记录还在积累。Echo 会在后台安静地保存今天的原始线索。"
-        lines = ["记录正在积累。"]
+            return tr("记录还在积累。Echo 会在后台安静地保存今天的原始线索。", "Echo is quietly collecting today's local clues.")
+        lines = [tr("记录正在积累。", "Records are accumulating.")]
         if moods:
-            lines.append("心情记录会作为时间线事件出现，照片只是附件，不是相册。")
+            lines.append(tr("心情记录会作为时间线事件出现，照片只是附件，不是相册。", "Mood moments appear on the timeline; photos remain local attachments."))
         if notes:
-            lines.append("今天已经留下了一句话，可以作为日报理解今天的线索。")
+            lines.append(tr("今天已经留下了一句话，可以作为日报理解今天的线索。", "Today's note can help the reflection understand the day."))
         return "\n".join(lines)
 
     def _last_update_time(
@@ -1842,15 +1915,15 @@ class TodayWindow(QWidget):
     def _outcomes(self, app_usage: list[AppUsage], notes: list[ManualNote]) -> list[str]:
         outcomes: list[str] = []
         if notes:
-            outcomes.append("留下了主动记录，让今天有了可以回看的意义")
+            outcomes.append(tr("留下了主动记录，让今天有了可以回看的意义", "Left a note that gives today meaning to revisit"))
         if any("code" in usage.app_name.lower() for usage in app_usage):
-            outcomes.append("继续推进了项目开发，把想法落到实际功能里")
+            outcomes.append(tr("继续推进了项目开发，把想法落到实际功能里", "Moved project work from ideas into real features"))
         if any(name in usage.app_name.lower() for usage in app_usage for name in ["chrome", "edge"]):
-            outcomes.append("查找和吸收资料，为后续判断补充证据")
+            outcomes.append(tr("查找和吸收资料，为后续判断补充证据", "Researched information to support later decisions"))
         if app_usage:
-            outcomes.append("让 Echo 多积累了一天真实的使用轨迹")
+            outcomes.append(tr("让 Echo 多积累了一天真实的使用轨迹", "Added another day of real activity to Echo"))
         if not outcomes:
-            outcomes.append("今天还没有推进记录，先让 Echo 安静等一天开始")
+            outcomes.append(tr("今天还没有推进记录，先让 Echo 安静等一天开始", "There is no activity yet; Echo is waiting for the day to begin"))
         return outcomes[:4]
 
     def _top_app(self, app_usage: list[AppUsage]) -> str | None:
@@ -1866,33 +1939,33 @@ class TodayWindow(QWidget):
         shown = display_time(raw_time)
         if len(shown) >= 2 and shown[:2].isdigit():
             return f"{shown[:2]}:00"
-        return "时间未记录"
+        return tr("时间未记录", "Time unavailable")
 
     def _category_for_usage(self, usage: AppUsage) -> str:
         name = f"{usage.app_name} {usage.window_title}".lower()
         if any(key in name for key in ["code", "pycharm", "visual studio", "cursor", "keil", "stm32", "git"]):
-            return "开发"
+            return tr("开发", "Development")
         if any(key in name for key in ["figma", "photoshop", "illustrator", "sketch"]):
-            return "设计"
+            return tr("设计", "Design")
         if any(key in name for key in ["chrome", "edge", "browser", "openai", "docs", "wiki"]):
-            return "学习"
+            return tr("学习", "Learning")
         if any(key in name for key in ["steam", "game", "bilibili", "youtube", "music", "video"]):
-            return "娱乐"
+            return tr("娱乐", "Entertainment")
         if any(key in name for key in ["explorer", "system", "settings", "taskmgr", "searchhost"]):
-            return "系统"
-        return "其他"
+            return tr("系统", "System")
+        return tr("其他", "Other")
 
     def _day_count_text(self) -> str:
         first_date = self.database.get_first_record_date()
         if not first_date:
-            return "第 1 天"
+            return tr("第 1 天", "Day 1")
         try:
             first = date.fromisoformat(first_date)
             days = max((date.today() - first).days + 1, 1)
         except ValueError:
             logger.exception("Invalid first record date: %s", first_date)
             days = 1
-        return f"第 {days} 天"
+        return tr(f"第 {days} 天", f"Day {days}")
 
     def _clear_layout(self, layout: QVBoxLayout) -> None:
         while layout.count():

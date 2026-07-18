@@ -1,8 +1,8 @@
 **Design QA — Memory Replay**
 
-- Source visual truth: `E:\Echo\logs\memory_replay_reference.png` (Figma frame `5:2`)
-- Implementation screenshot: `C:\Users\Jay\.codex\visualizations\2026\07\13\019f5988-5378-7863-b17e-d048b3d4a8cd\memory_replay_implementation.jpg`
-- Side-by-side comparison: `C:\Users\Jay\.codex\visualizations\2026\07\13\019f5988-5378-7863-b17e-d048b3d4a8cd\memory_replay_comparison.jpg`
+- Source visual truth: local reference capture excluded from version control (Figma frame `5:2`)
+- Implementation screenshot: local QA artifact excluded from version control
+- Side-by-side comparison: local QA artifact excluded from version control
 - Viewport: 1440 × 900, Windows desktop, Memory page, current local data
 
 **Findings**
