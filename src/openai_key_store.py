@@ -20,7 +20,10 @@ def load_openai_api_key() -> str:
         )
         blob = credential.get("CredentialBlob", b"")
         if isinstance(blob, bytes):
-            return blob.decode("utf-16-le").rstrip("\x00").strip()
+            try:
+                return blob.decode("utf-16-le").rstrip("\x00").strip()
+            except UnicodeDecodeError:
+                return blob.decode("utf-8").rstrip("\x00").strip()
         return str(blob).strip()
     except Exception:
         return ""
@@ -44,7 +47,10 @@ def save_openai_api_key(api_key: str) -> None:
         {
             "Type": win32cred.CRED_TYPE_GENERIC,
             "TargetName": _CREDENTIAL_TARGET,
-            "CredentialBlob": key.encode("utf-16-le"),
+            # pywin32's Unicode CredWrite wrapper expects a string here.
+            # Passing bytes raises "Objects of type 'bytes' can not be
+            # converted to Unicode" on current Windows builds.
+            "CredentialBlob": key,
             "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE,
             "UserName": "Echo Recorder",
         },

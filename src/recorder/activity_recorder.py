@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -11,6 +12,14 @@ from src.utils.time_utils import DATE_FORMAT, duration_seconds, now, to_db_datet
 
 
 logger = logging.getLogger(__name__)
+_SECRET_TOKEN = re.compile(
+    r"\b(?:sk-[A-Za-z0-9_-]{8,}|github_pat_[A-Za-z0-9_]{8,}|gh[pousr]_[A-Za-z0-9]{8,})\b"
+)
+
+
+def redact_sensitive_window_title(title: str) -> str:
+    """Remove recognizable secret tokens before persistent storage."""
+    return _SECRET_TOKEN.sub("[secret removed]", title)
 
 
 @dataclass
@@ -117,7 +126,7 @@ class ActivityRecorder:
         usage_id = self.database.create_app_usage(
             date=start.strftime(DATE_FORMAT),
             app_name=info.app_name,
-            window_title=info.window_title,
+            window_title=redact_sensitive_window_title(info.window_title),
             start_time=to_db_datetime(start),
             created_at=to_db_datetime(start),
         )
@@ -126,7 +135,8 @@ class ActivityRecorder:
             self.current = None
             return
         self.current = ActiveUsage(id=usage_id, info=info, start_time=start)
-        logger.info("Started usage: app=%s title=%s", info.app_name, info.window_title)
+        # Window titles can contain document names, search terms, or secrets.
+        logger.info("Started usage: app=%s", info.app_name)
 
     def _finish_current(self, end: datetime | None = None) -> bool:
         if not self.current:

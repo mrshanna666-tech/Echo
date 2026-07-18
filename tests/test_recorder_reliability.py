@@ -96,6 +96,21 @@ class RecorderReliabilityTests(unittest.TestCase):
         self.assertEqual([row.app_name for row in rows], ["Editor"])
         self.assertEqual(recorder.current.info, second)
 
+    def test_secret_token_is_redacted_before_window_title_is_stored(self):
+        secret = "sk-" + ("example" * 5)
+        info = WindowInfo("Notepad", f"API Key: {secret}", 1)
+        recorder = ActivityRecorder(self.db, StaticTracker(info))
+        times = [
+            datetime(2026, 7, 11, 10, 0, 0),
+            datetime(2026, 7, 11, 10, 0, 0),
+        ]
+        with patch("src.recorder.activity_recorder.now", side_effect=times):
+            recorder.tick()
+
+        row = self.db.get_app_usage_by_date("2026-07-11")[0]
+        self.assertNotIn(secret, row.window_title)
+        self.assertIn("[secret removed]", row.window_title)
+
 
 if __name__ == "__main__":
     unittest.main()
