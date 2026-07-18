@@ -117,6 +117,23 @@ def generate_ai_summary_for_date(
         manual_notes,
         include_notes,
     )
+    return generate_ai_summary_from_payload(
+        payload,
+        api_key=api_key,
+        language=language,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def generate_ai_summary_from_payload(
+    payload: SanitizedSummaryPayload,
+    *,
+    api_key: str,
+    language: str,
+    timeout_seconds: int = 60,
+) -> SummaryResult:
+    """Generate from an already-sanitized payload; safe to call off the UI thread."""
+    date_text = payload.date
     language_instruction = (
         "Write in concise, warm English."
         if language == "en"

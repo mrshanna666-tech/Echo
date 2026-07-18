@@ -24,6 +24,8 @@ Work completed or materially expanded from July 13, 2026 includes:
 - Windows Credential Manager storage for the user's API key
 - Simplified Chinese and English interface switching without adding controls to the Memory page
 - privacy tests proving window titles and common identifiers are excluded from AI payloads
+- an isolated `--demo` mode that gives judges a complete synthetic day without exposing personal activity
+- non-blocking GPT-5.6 generation so the desktop interface remains usable during a request
 
 ## Use of Codex and GPT-5.6
 
@@ -39,7 +41,7 @@ Evidence to retain:
 
 ## Validation
 
-On July 18, 2026, the project imported successfully and all 17 automated `unittest` tests passed. The privacy suite verifies that AI payloads omit window titles, paths, email addresses, URLs, IP addresses, and notes unless notes are explicitly enabled.
+On July 18, 2026, the project imported successfully and all automated `unittest` tests passed. The privacy suite verifies that AI payloads omit window titles, paths, email addresses, URLs, IP addresses, and notes unless notes are explicitly enabled. Credential storage and synthetic demo isolation are also covered by automated tests.
 
 ## Submission positioning
 

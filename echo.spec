@@ -1,8 +1,7 @@
 # PyInstaller build configuration for the Windows desktop executable.
-from PyInstaller.utils.hooks import collect_submodules
-
-
-hiddenimports = collect_submodules("PySide6")
+# PyInstaller's PySide6 hooks discover the Qt modules imported by Echo.
+# Avoid collecting every optional Qt module so the judge build stays compact.
+hiddenimports = ["win32cred"]
 
 
 a = Analysis(

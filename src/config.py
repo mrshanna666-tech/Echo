@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 
@@ -7,8 +8,8 @@ MAX_POLL_GAP_SECONDS = 30
 MIN_ACTIVITY_SECONDS = 5
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT_DIR / "data"
-LOG_DIR = ROOT_DIR / "logs"
+DATA_DIR = Path(os.environ.get("ECHO_DATA_DIR", ROOT_DIR / "data")).resolve()
+LOG_DIR = DATA_DIR / "logs" if os.environ.get("ECHO_DEMO_MODE") == "1" else ROOT_DIR / "logs"
 DOCS_DIR = ROOT_DIR / "docs"
 DB_PATH = DATA_DIR / "activity.db"
 ERROR_LOG_PATH = LOG_DIR / "error.log"

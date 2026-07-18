@@ -40,6 +40,16 @@ Echo starts in the Windows system tray. Use the tray menu to open the main windo
 
 Language and the optional AI reflection mode can be changed under **Settings**. Changing the language rebuilds the main window immediately without changing recorded data or the Memory layout.
 
+## Privacy-safe demo mode
+
+Run Echo with a complete synthetic day:
+
+```powershell
+.\.venv\Scripts\python main.py --demo
+```
+
+Demo mode stores its temporary database, preferences, logs, and generated reflections under the Windows temporary directory in `EchoRecorderDemo`. It pauses activity recording, never reads the normal Echo database, and makes no API request unless a tester separately configures a key and explicitly confirms the sanitized preview. Each launch resets the synthetic day.
+
 ## Run tests
 
 ```powershell
@@ -54,6 +64,8 @@ Install PyInstaller, then build with the included specification:
 .\.venv\Scripts\pip install pyinstaller
 .\.venv\Scripts\pyinstaller --clean echo.spec
 ```
+
+The resulting `dist\EchoRecorder.exe` also accepts `--demo`, giving judges a no-setup testing path with synthetic data.
 
 ## OpenAI Build Week
 

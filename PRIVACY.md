@@ -11,6 +11,8 @@ Echo is designed as a local-first Windows activity journal.
 - Manual notes are excluded unless the user enables the separate notes option. Even then, common identifiers are removed before the preview and request are created.
 - The OpenAI API key is read from `OPENAI_API_KEY` or stored in Windows Credential Manager under `EchoRecorder/OpenAI`. It is never written to preferences, logs, exports, summaries, or source control.
 - If an AI request fails, Echo creates a local reflection instead and does not retry or send additional data automatically.
+- Recognizable API and source-control tokens are replaced before a window title is stored. Window titles are never written to Echo's diagnostic log.
+- `--demo` mode pauses activity recording and uses an isolated synthetic database under the Windows temporary directory; it does not read or modify the normal Echo database.
 - Echo does not require these personal records to be committed to source control.
 - The repository ignore rules exclude the `data/` and `logs/` directories, SQLite databases, local preferences, screenshots, recordings, secrets, and environment files.
 - Contributors must use synthetic data in tests, screenshots, demos, and documentation.

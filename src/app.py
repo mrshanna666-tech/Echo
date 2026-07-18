@@ -7,8 +7,9 @@ import traceback
 import ctypes
 import shutil
 from pathlib import Path
+from typing import Callable
 
-from PySide6.QtCore import QLockFile, QTimer
+from PySide6.QtCore import QLockFile, QObject, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QFont, QFontDatabase, QIcon
 from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox, QSystemTrayIcon
 
@@ -21,6 +22,7 @@ from src.config import (
 )
 from src.database.db import Database
 from src.data_export import backup_database_connection, export_all_data
+from src.demo_data import seed_demo_database
 from src.i18n import tr
 from src.openai_key_store import load_openai_api_key
 from src.preferences import load_preferences
@@ -29,8 +31,9 @@ from src.recorder.window_tracker import WindowTracker
 from src.summary.ai_summary_generator import (
     build_preview,
     build_sanitized_payload,
-    generate_ai_summary_for_date,
+    generate_ai_summary_from_payload,
 )
+from src.summary.local_summary_generator import SummaryResult
 from src.summary.local_summary_generator import generate_summary_for_date, get_today_summary_path
 from src.ui.main_window import MainWindow
 from src.ui.note_dialog import NoteDialog
@@ -42,6 +45,23 @@ from src.utils.time_utils import now, today_str, to_db_datetime
 
 
 logger = logging.getLogger(__name__)
+
+
+class SummaryWorker(QObject):
+    finished = Signal(object)
+    failed = Signal()
+
+    def __init__(self, task: Callable[[], SummaryResult]) -> None:
+        super().__init__()
+        self._task = task
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            self.finished.emit(self._task())
+        except Exception:
+            logger.exception("Background GPT-5.6 reflection failed.")
+            self.failed.emit()
 
 
 def _install_application_font(app: QApplication) -> None:
@@ -73,6 +93,7 @@ def _set_windows_app_user_model_id() -> None:
 
 class EchoApp:
     def __init__(self) -> None:
+        self.demo_mode = os.environ.get("ECHO_DEMO_MODE") == "1"
         ensure_app_dirs()
         setup_logging()
         logger.info("Echo Recorder starting.")
@@ -95,12 +116,19 @@ class EchoApp:
 
         self.database = Database(DB_PATH)
         self.database.initialize()
-        self.database.recover_unfinished_app_usage(end_time=to_db_datetime(now()))
+        if self.demo_mode:
+            seed_demo_database(self.database)
+        else:
+            self.database.recover_unfinished_app_usage(end_time=to_db_datetime(now()))
 
         self.recorder = ActivityRecorder(self.database, WindowTracker())
+        self.recorder.paused = self.demo_mode
         self.tray = TrayController()
         self.today_window: MainWindow | None = None
         self._recording_error_shown = False
+        self._summary_thread: QThread | None = None
+        self._summary_worker: SummaryWorker | None = None
+        self._background_summary_date: str | None = None
 
         self.timer = QTimer()
         self.timer.setInterval(POLL_INTERVAL_MS)
@@ -117,8 +145,12 @@ class EchoApp:
     def run(self) -> int:
         try:
             self.tray.show()
-            self.timer.start()
-            self._safe_tick()
+            if self.demo_mode:
+                self.tray.set_paused(True)
+                QTimer.singleShot(0, self.show_today)
+            else:
+                self.timer.start()
+                self._safe_tick()
             logger.info("Echo Recorder started.")
             return self.qt_app.exec()
         except Exception:
@@ -138,6 +170,10 @@ class EchoApp:
                 self.today_window.clear_today_requested.connect(self.clear_today_records)
                 self.today_window.language_change_requested.connect(self._rebuild_main_window)
             self.today_window.refresh()
+            if self.demo_mode:
+                self.today_window.setWindowTitle(
+                    tr("Echo Recorder — 虚构数据演示", "Echo Recorder — Synthetic Demo")
+                )
             self.today_window.show()
             self.today_window.raise_()
             self.today_window.activateWindow()
@@ -232,6 +268,13 @@ class EchoApp:
 
     def generate_summary_for_date(self, date_text: str) -> None:
         try:
+            if self._summary_thread is not None and self._summary_thread.isRunning():
+                QMessageBox.information(
+                    self.today_window,
+                    "Echo Recorder",
+                    tr("GPT‑5.6 回顾正在后台生成。", "A GPT‑5.6 reflection is already running in the background."),
+                )
+                return
             self.recorder.refresh_current_duration()
             preferences = load_preferences()
             result = None
@@ -257,26 +300,12 @@ class EchoApp:
                         self.today_window.set_summary_loading(False)
                     return
                 if dialog.choice == SummaryModeDialog.AI:
-                    try:
-                        result = generate_ai_summary_for_date(
-                            self.database,
-                            date_text,
-                            api_key,
-                            preferences.ai_include_notes,
-                            preferences.language,
-                        )
-                        used_ai = True
-                    except Exception:
-                        logger.exception("GPT-5.6 summary failed; using local fallback.")
-                        result = generate_summary_for_date(self.database, date_text)
-                        QMessageBox.warning(
-                            self.today_window,
-                            "Echo Recorder",
-                            tr(
-                                "GPT‑5.6 暂时不可用，已改用完全本地总结；没有继续上传其他数据。",
-                                "GPT‑5.6 was unavailable, so Echo used the fully local summary. No additional data was sent.",
-                            ),
-                        )
+                    self._start_ai_summary(
+                        payload,
+                        api_key=api_key,
+                        language=preferences.language,
+                    )
+                    return
                 else:
                     result = generate_summary_for_date(self.database, date_text)
             else:
@@ -310,6 +339,70 @@ class EchoApp:
                 tr("日报生成失败，请查看日志。", "The reflection failed. Check the log."),
                 QSystemTrayIcon.MessageIcon.Warning,
             )
+
+    def _start_ai_summary(self, payload, *, api_key: str, language: str) -> None:
+        self._background_summary_date = payload.date
+        thread = QThread()
+        worker = SummaryWorker(
+            lambda: generate_ai_summary_from_payload(
+                payload,
+                api_key=api_key,
+                language=language,
+            )
+        )
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._ai_summary_finished)
+        worker.failed.connect(self._ai_summary_failed)
+        worker.finished.connect(thread.quit)
+        worker.failed.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        worker.failed.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._clear_summary_thread)
+        self._summary_thread = thread
+        self._summary_worker = worker
+        thread.start()
+        self._show_message(
+            "Echo Recorder",
+            tr(
+                "GPT‑5.6 正在后台整理回顾，你可以继续使用 Echo。",
+                "GPT‑5.6 is preparing the reflection in the background. You can keep using Echo.",
+            ),
+            QSystemTrayIcon.MessageIcon.Information,
+        )
+
+    @Slot(object)
+    def _ai_summary_finished(self, result: SummaryResult) -> None:
+        logger.info("GPT-5.6 reflection generated in background: %s", result.path)
+        if self.today_window is not None:
+            self.today_window.set_summary_result(True)
+        self._show_message(
+            "Echo Recorder",
+            tr("GPT‑5.6 深度回顾已生成。", "GPT‑5.6 reflection generated."),
+            QSystemTrayIcon.MessageIcon.Information,
+        )
+
+    @Slot()
+    def _ai_summary_failed(self) -> None:
+        date_text = self._background_summary_date
+        result = generate_summary_for_date(self.database, date_text) if date_text else None
+        if self.today_window is not None:
+            self.today_window.set_summary_result(result is not None)
+        QMessageBox.warning(
+            self.today_window,
+            "Echo Recorder",
+            tr(
+                "GPT‑5.6 暂时不可用，已改用完全本地总结；没有继续上传其他数据。",
+                "GPT‑5.6 was unavailable, so Echo used the fully local summary. No additional data was sent.",
+            ),
+        )
+
+    @Slot()
+    def _clear_summary_thread(self) -> None:
+        self._summary_thread = None
+        self._summary_worker = None
+        self._background_summary_date = None
 
     def open_summary(self) -> None:
         try:
