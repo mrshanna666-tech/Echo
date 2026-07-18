@@ -1,0 +1,1 @@
+"""Local mood recording helpers."""
