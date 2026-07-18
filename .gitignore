@@ -1,0 +1,60 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Echo private user data
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+exports/
+recordings/
+screenshots/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
+preferences.json
+.echo.lock
+
+# Secrets and machine-local configuration
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+*.p12
+secrets/
+
+# Bundled third-party applications and downloaded installers
+ActivityWatch/
+activitywatch-*-setup.exe
+/*.exe
+/*.msi
+
+# Generated packages and build output
+build/
+dist/
+*.zip
+*.7z
+
+# Local design and test captures that may contain personal screen data
+/*.bmp
+/*.png
+/*.docx
+
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
