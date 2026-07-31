@@ -5,6 +5,7 @@ import os
 import sys
 from collections import defaultdict
 from datetime import date
+from pathlib import Path
 
 import shiboken6
 from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QPropertyAnimation, Qt, QTimer, Signal
@@ -30,8 +31,10 @@ from src.database.db import Database
 from src.database.models import AppUsage, ManualNote
 from src.i18n import tr
 from src.mood.local_mood_journal import MoodEntry, get_mood_entries_by_date
+from src.security import read_protected_bytes, read_protected_text
 from src.summary.local_summary_generator import get_today_summary_path
 from src.ui.mood_drawer import MoodDrawer
+from src.ui.pages.ask_echo_page import AskEchoPage
 from src.ui.pages.diary_page import DiaryPage
 from src.ui.pages.memory_page import MemoryPage
 from src.ui.pages.notes_page import NotesPage
@@ -261,9 +264,9 @@ class SummaryDetailDialog(QDialog):
         self.editor.setObjectName("summaryViewer")
         self.editor.setReadOnly(True)
         try:
-            self.editor.setPlainText(summary_path.read_text(encoding="utf-8"))
+            self.editor.setPlainText(read_protected_text(summary_path, encoding="utf-8"))
         except UnicodeDecodeError:
-            self.editor.setPlainText(summary_path.read_text(encoding="utf-8-sig"))
+            self.editor.setPlainText(read_protected_text(summary_path, encoding="utf-8-sig"))
 
         buttons = QHBoxLayout()
         open_file_button = QPushButton(tr("用默认编辑器打开", "Open in default editor"))
@@ -394,6 +397,13 @@ class TodayWindow(QWidget):
     export_requested = Signal()
     clear_today_requested = Signal()
     language_change_requested = Signal()
+    enable_data_protection_requested = Signal()
+    lock_data_requested = Signal()
+    unlock_data_requested = Signal()
+    recovery_key_requested = Signal()
+    recover_data_requested = Signal()
+    encrypted_export_requested = Signal()
+    decrypt_export_requested = Signal()
 
     def __init__(self, database: Database) -> None:
         super().__init__()
@@ -409,6 +419,7 @@ class TodayWindow(QWidget):
             "diary": tr("日报", "Reflection"),
             "notes": tr("一句话", "Notes"),
             "memory": "Memory",
+            "ask_echo": tr("问 Echo", "Ask Echo"),
             "settings": tr("设置", "Settings"),
         }
 
@@ -517,6 +528,8 @@ class TodayWindow(QWidget):
                 self.diary_page.set_date(today_str())
             if key == "memory":
                 self.memory_page.refresh()
+            if key == "ask_echo":
+                self.ask_echo_page.refresh()
             self._fade_page(self.stack.currentWidget())
             if sys.platform == "win32":
                 self._commit_page_surface(self.stack.currentWidget())
@@ -575,14 +588,24 @@ class TodayWindow(QWidget):
         self.notes_page = NotesPage(self.database)
         self.memory_page = MemoryPage(self.database)
         self.memory_page.report_requested.connect(self._open_diary_for_date)
+        self.ask_echo_page = AskEchoPage(self.database)
+        self.ask_echo_page.timeline_requested.connect(self._open_timeline_evidence)
         self.settings_page = SettingsPage()
         self.settings_page.export_requested.connect(self.export_requested.emit)
         self.settings_page.clear_today_requested.connect(self.clear_today_requested.emit)
         self.settings_page.settings_changed.connect(self._settings_changed)
+        self.settings_page.enable_data_protection_requested.connect(self.enable_data_protection_requested.emit)
+        self.settings_page.lock_data_requested.connect(self.lock_data_requested.emit)
+        self.settings_page.unlock_data_requested.connect(self.unlock_data_requested.emit)
+        self.settings_page.recovery_key_requested.connect(self.recovery_key_requested.emit)
+        self.settings_page.recover_data_requested.connect(self.recover_data_requested.emit)
+        self.settings_page.encrypted_export_requested.connect(self.encrypted_export_requested.emit)
+        self.settings_page.decrypt_export_requested.connect(self.decrypt_export_requested.emit)
         self.timeline_scroll = self._wrap_page(self.timeline_page)
         self.diary_scroll = self._wrap_page(self.diary_page)
         self.notes_scroll = self._wrap_page(self.notes_page)
         self.memory_scroll = self._wrap_page(self.memory_page)
+        self.ask_echo_scroll = self._wrap_page(self.ask_echo_page)
         self.settings_scroll = self._wrap_page(self.settings_page)
         self._page_indexes = {
             "today": self.stack.indexOf(self.scroll),
@@ -590,6 +613,7 @@ class TodayWindow(QWidget):
             "diary": self.stack.addWidget(self.diary_scroll),
             "notes": self.stack.addWidget(self.notes_scroll),
             "memory": self.stack.addWidget(self.memory_scroll),
+            "ask_echo": self.stack.addWidget(self.ask_echo_scroll),
             "settings": self.stack.addWidget(self.settings_scroll),
         }
 
@@ -699,6 +723,37 @@ class TodayWindow(QWidget):
             self.memory_card,
             self.status_card,
         ]
+
+    def set_security_state(self, enabled: bool, locked: bool, *, demo: bool = False, message: str = "") -> None:
+        self.sidebar.set_data_locked(locked)
+        self.settings_page.set_security_state(enabled, locked, demo=demo, message=message)
+        if locked:
+            self._switch_page("settings")
+
+    def purge_sensitive_content(self) -> None:
+        """Remove rendered private data before the window is discarded on lock."""
+        if hasattr(self, "mood_drawer"):
+            self.mood_drawer.stop_camera()
+            self.mood_drawer.note_edit.clear()
+            self.mood_drawer.hide()
+        if hasattr(self, "detail_panel"):
+            self.detail_panel.hide()
+        for label_name in (
+            "memory_quote", "memory_reason", "today_status_body", "detail_title",
+            "detail_meta", "detail_body", "detail_context", "detail_photo",
+        ):
+            label = getattr(self, label_name, None)
+            if label is not None:
+                label.clear()
+        if hasattr(self, "ask_echo_page"):
+            self.ask_echo_page.query_input.clear()
+            self.ask_echo_page.status_label.clear()
+        if hasattr(self, "timeline_page"):
+            self.timeline_page.search_input.clear()
+
+    def _open_timeline_evidence(self, query: str, date: str) -> None:
+        self.timeline_page.focus_search(query, date)
+        self._switch_page("timeline")
 
     def _apply_styles(self) -> None:
         self.setStyleSheet(
@@ -1594,8 +1649,24 @@ class TodayWindow(QWidget):
             self.detail_photo.setText(tr("暂无照片", "No photo"))
             return
         if image_path.startswith("encrypted:") or image_path.lower().endswith(".enc"):
-            self.detail_photo.setPixmap(QPixmap())
-            self.detail_photo.setText(tr("数据已加密，请先解锁", "The data is encrypted. Unlock it first."))
+            try:
+                pixmap = QPixmap()
+                if not pixmap.loadFromData(read_protected_bytes(Path(image_path.replace("encrypted:", "", 1)))):
+                    raise ValueError("Unsupported encrypted image")
+                self.detail_photo.setText("")
+                self.detail_photo.setPixmap(
+                    pixmap.scaled(
+                        self.detail_photo.width(),
+                        self.detail_photo.height(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+                self.view_photo_button.setEnabled(True)
+                self.open_photo_folder_button.setEnabled(True)
+            except Exception:
+                self.detail_photo.setPixmap(QPixmap())
+                self.detail_photo.setText(tr("数据已锁定", "The data is locked."))
             return
         if not os.path.exists(image_path):
             self.detail_photo.setPixmap(QPixmap())
@@ -1622,6 +1693,22 @@ class TodayWindow(QWidget):
         if not path:
             return
         try:
+            if path.lower().endswith(".enc"):
+                pixmap = QPixmap()
+                if not pixmap.loadFromData(read_protected_bytes(Path(path))):
+                    raise ValueError("Unsupported encrypted image")
+                dialog = QDialog(self)
+                dialog.setWindowTitle(tr("加密照片", "Encrypted photo"))
+                layout = QVBoxLayout(dialog)
+                label = QLabel()
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                label.setPixmap(
+                    pixmap.scaled(900, 650, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                )
+                layout.addWidget(label)
+                dialog.resize(920, 690)
+                dialog.exec()
+                return
             os.startfile(path)
         except Exception:
             logger.exception("Failed to open mood photo: %s", path)

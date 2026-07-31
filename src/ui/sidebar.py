@@ -130,6 +130,7 @@ class Sidebar(QFrame):
             ("diary", tr("日报", "Reflection")),
             ("notes", tr("一句话", "Notes")),
             ("memory", "Memory"),
+            ("ask_echo", tr("问 Echo", "Ask Echo")),
             ("settings", tr("设置", "Settings")),
         ]:
             button = AnimatedNavButton(label)
@@ -151,12 +152,12 @@ class Sidebar(QFrame):
         local_row.setSpacing(7)
         self.local_dot = QLabel("●")
         self.local_dot.setObjectName("localDot")
-        local = QLabel(tr("本地记录中", "Recording locally"))
-        local.setObjectName("localStatus")
+        self.local_status = QLabel(tr("本地记录中", "Recording locally"))
+        self.local_status.setObjectName("localStatus")
         path = QLabel("data")
         path.setObjectName("mutedSmall")
         local_row.addWidget(self.local_dot)
-        local_row.addWidget(local)
+        local_row.addWidget(self.local_status)
         local_row.addStretch()
         layout.addLayout(local_row)
         layout.addWidget(path)
@@ -168,6 +169,18 @@ class Sidebar(QFrame):
             self._pulse_timer.start()
 
         self.set_active("today", emit=False)
+
+    def set_data_locked(self, locked: bool) -> None:
+        for key, button in self._buttons.items():
+            button.setEnabled(not locked or key == "settings")
+        self.mood_button.setEnabled(not locked)
+        self.local_status.setText(
+            tr("数据已锁定", "Data locked") if locked else tr("本地记录中", "Recording locally")
+        )
+        if not locked and sys.platform != "win32" and not reduced_motion_enabled():
+            self._pulse_timer.start()
+        else:
+            self._pulse_timer.stop()
 
     def set_active(self, key: str, emit: bool = True) -> None:
         if key not in self._buttons:

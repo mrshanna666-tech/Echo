@@ -32,9 +32,14 @@ class PreferencesAndTimelineTests(unittest.TestCase):
             expected = Preferences(
                 excluded_keywords=("secret",),
                 idle_minutes=8,
+                auto_lock_enabled=False,
+                auto_lock_minutes=27,
                 language="en",
                 ai_enabled=True,
                 ai_include_notes=True,
+                ai_provider="local",
+                local_ai_base_url="http://127.0.0.1:1234/v1",
+                local_ai_model="echo-small",
             )
             save_preferences(expected, path)
             self.assertEqual(load_preferences(path), expected)

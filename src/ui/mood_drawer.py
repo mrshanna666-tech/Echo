@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from src.mood.local_mood_journal import append_mood_entry, create_mood_image_path
 from src.i18n import tr
+from src.security import get_security_manager
 
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,9 @@ class MoodDrawer(QFrame):
             image_path = Path(file_name)
             if self._pending_image_path is not None:
                 image_path = self._pending_image_path
+            security = get_security_manager()
+            if security.enabled:
+                image_path = security.encrypt_file(image_path)
             selected = self.mood_group.checkedButton()
             mood = selected.text() if selected is not None else tr("平静", "Calm")
             append_mood_entry(image_path, mood, self.note_edit.toPlainText())
