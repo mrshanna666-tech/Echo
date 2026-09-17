@@ -93,6 +93,10 @@ class WindowTracker:
             logger.exception("Failed to read system idle time.")
             return 0
 
+    def idle_seconds(self) -> float:
+        """Return Windows-wide idle time for privacy auto-lock decisions."""
+        return self._idle_seconds()
+
     def _get_process_name(self, process_id: int) -> str:
         handle = None
         try:

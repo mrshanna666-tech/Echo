@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import replace
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -22,6 +23,13 @@ class SettingsPage(QWidget):
     export_requested = Signal()
     clear_today_requested = Signal()
     settings_changed = Signal(bool)
+    enable_data_protection_requested = Signal()
+    lock_data_requested = Signal()
+    unlock_data_requested = Signal()
+    recovery_key_requested = Signal()
+    recover_data_requested = Signal()
+    encrypted_export_requested = Signal()
+    decrypt_export_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -45,6 +53,63 @@ class SettingsPage(QWidget):
         )
         subtitle.setObjectName("storyBody")
         subtitle.setWordWrap(True)
+
+        security_card = self._card()
+        security_layout = self._card_layout(security_card)
+        security_header = QHBoxLayout()
+        security_label = QLabel(tr("数据保护", "Data protection"))
+        security_label.setObjectName("sectionLabel")
+        self.security_status = QLabel()
+        self.security_status.setObjectName("statusPill")
+        security_header.addWidget(security_label)
+        security_header.addStretch()
+        security_header.addWidget(self.security_status)
+        self.security_detail = QLabel()
+        self.security_detail.setObjectName("storyBody")
+        self.security_detail.setWordWrap(True)
+        security_buttons = QHBoxLayout()
+        security_buttons.setSpacing(10)
+        self.enable_encryption_button = QPushButton(tr("启用数据保护", "Enable data protection"))
+        self.enable_encryption_button.setObjectName("primaryButton")
+        self.lock_data_button = QPushButton(tr("立即锁定", "Lock now"))
+        self.lock_data_button.setObjectName("secondaryButton")
+        self.unlock_data_button = QPushButton(tr("解锁数据", "Unlock data"))
+        self.unlock_data_button.setObjectName("primaryButton")
+        self.recovery_key_button = QPushButton(tr("保存恢复密钥", "Save recovery key"))
+        self.recovery_key_button.setObjectName("secondaryButton")
+        self.recover_data_button = QPushButton(tr("使用恢复密钥", "Use recovery key"))
+        self.recover_data_button.setObjectName("secondaryButton")
+        self.enable_encryption_button.clicked.connect(self.enable_data_protection_requested.emit)
+        self.lock_data_button.clicked.connect(self.lock_data_requested.emit)
+        self.unlock_data_button.clicked.connect(self.unlock_data_requested.emit)
+        self.recovery_key_button.clicked.connect(self.recovery_key_requested.emit)
+        self.recover_data_button.clicked.connect(self.recover_data_requested.emit)
+        security_buttons.addWidget(self.enable_encryption_button)
+        security_buttons.addWidget(self.lock_data_button)
+        security_buttons.addWidget(self.unlock_data_button)
+        security_buttons.addWidget(self.recovery_key_button)
+        security_buttons.addWidget(self.recover_data_button)
+        security_buttons.addStretch()
+        auto_lock_row = QHBoxLayout()
+        self.auto_lock_enabled = QCheckBox(tr("离开后自动锁定", "Lock automatically when away"))
+        self.auto_lock_enabled.setChecked(preferences.auto_lock_enabled)
+        self.auto_lock_minutes = QSpinBox()
+        self.auto_lock_minutes.setRange(1, 120)
+        self.auto_lock_minutes.setSuffix(tr(" 分钟", " min"))
+        self.auto_lock_minutes.setValue(preferences.auto_lock_minutes)
+        self.auto_lock_enabled.toggled.connect(self.auto_lock_minutes.setEnabled)
+        save_security = QPushButton(tr("保存保护设置", "Save protection settings"))
+        save_security.setObjectName("secondaryButton")
+        save_security.clicked.connect(self._save_security_settings)
+        auto_lock_row.addWidget(self.auto_lock_enabled)
+        auto_lock_row.addWidget(self.auto_lock_minutes)
+        auto_lock_row.addWidget(save_security)
+        auto_lock_row.addStretch()
+        security_layout.addLayout(security_header)
+        security_layout.addWidget(self.security_detail)
+        security_layout.addLayout(auto_lock_row)
+        security_layout.addLayout(security_buttons)
+        self.set_security_state(False, False)
 
         privacy_card = self._card()
         privacy_layout = self._card_layout(privacy_card)
@@ -152,6 +217,12 @@ class SettingsPage(QWidget):
             )
         )
         self.ai_include_notes.setChecked(preferences.ai_include_notes)
+        provider_label = QLabel(tr("AI 大脑", "AI brain"))
+        provider_label.setObjectName("storyBody")
+        self.ai_provider = QComboBox()
+        self.ai_provider.addItem(tr("OpenAI API（云端）", "OpenAI API (cloud)"), "openai")
+        self.ai_provider.addItem(tr("本地 OpenAI 兼容模型", "Local OpenAI-compatible model"), "local")
+        self.ai_provider.setCurrentIndex(max(self.ai_provider.findData(preferences.ai_provider), 0))
         api_key_label = QLabel(
             tr(
                 "OpenAI API Key（保存在 Windows 凭据管理器中）",
@@ -168,15 +239,31 @@ class SettingsPage(QWidget):
             )
         )
         save_ai = QPushButton(tr("保存语言与 AI 设置", "Save language and AI settings"))
+        self.local_url_label = QLabel(tr("本地服务地址", "Local server URL"))
+        self.local_url_label.setObjectName("storyBody")
+        self.local_url_input = QLineEdit(preferences.local_ai_base_url)
+        self.local_url_input.setPlaceholderText("http://127.0.0.1:11434/v1")
+        self.local_model_label = QLabel(tr("本地模型名", "Local model name"))
+        self.local_model_label.setObjectName("storyBody")
+        self.local_model_input = QLineEdit(preferences.local_ai_model)
+        self.local_model_input.setPlaceholderText(tr("例如：你已启动的本地模型名", "For example: the local model you started"))
         save_ai.setObjectName("primaryButton")
         save_ai.clicked.connect(self._save_experience_settings)
         ai_layout.addWidget(ai_label)
         ai_layout.addWidget(ai_copy)
         ai_layout.addWidget(self.ai_enabled)
         ai_layout.addWidget(self.ai_include_notes)
+        ai_layout.addWidget(provider_label)
+        ai_layout.addWidget(self.ai_provider)
         ai_layout.addWidget(api_key_label)
         ai_layout.addWidget(self.api_key_input)
+        ai_layout.addWidget(self.local_url_label)
+        ai_layout.addWidget(self.local_url_input)
+        ai_layout.addWidget(self.local_model_label)
+        ai_layout.addWidget(self.local_model_input)
         ai_layout.addWidget(save_ai, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.ai_provider.currentIndexChanged.connect(self._update_ai_provider_fields)
+        self._update_ai_provider_fields()
 
         export_card = self._card("quietCard")
         export_layout = self._card_layout(export_card)
@@ -187,7 +274,7 @@ class SettingsPage(QWidget):
                 "导出内容包括本地 Markdown 日报、手动记录和应用使用记录。"
                 "导出前 Echo 会提示保存位置，不会自动上传。",
                 "Exports include local Markdown reflections, notes, and application activity. "
-                "Echo asks where to save the archive and never uploads it automatically.",
+                "Echo asks where to save the archive and never uploads it automatically. Protected data is decrypted into a portable, readable archive, so keep it secure.",
             )
         )
         export_copy.setObjectName("storyBody")
@@ -195,12 +282,21 @@ class SettingsPage(QWidget):
         export_buttons = QHBoxLayout()
         export_buttons.setSpacing(10)
         export_markdown = QPushButton(tr("导出全部日报", "Export all data"))
-        export_markdown.setObjectName("primaryButton")
+        export_markdown.setText(tr("导出可读 ZIP", "Export readable ZIP"))
+        export_markdown.setObjectName("secondaryButton")
+        export_encrypted = QPushButton(tr("密码加密导出", "Password-encrypted export"))
+        export_encrypted.setObjectName("primaryButton")
         export_database = QPushButton(tr("打开数据库目录", "Open database folder"))
         export_database.setObjectName("secondaryButton")
         export_markdown.clicked.connect(self.export_requested.emit)
+        export_encrypted.clicked.connect(self.encrypted_export_requested.emit)
         export_database.clicked.connect(self._open_data_location)
+        decrypt_export = QPushButton(tr("解密导出文件", "Decrypt export file"))
+        decrypt_export.setObjectName("secondaryButton")
+        decrypt_export.clicked.connect(self.decrypt_export_requested.emit)
+        export_buttons.addWidget(export_encrypted)
         export_buttons.addWidget(export_markdown)
+        export_buttons.addWidget(decrypt_export)
         export_buttons.addWidget(export_database)
         export_buttons.addStretch()
         export_layout.addWidget(export_label)
@@ -209,11 +305,63 @@ class SettingsPage(QWidget):
 
         root.addWidget(title)
         root.addWidget(subtitle)
+        root.addWidget(security_card)
         root.addWidget(privacy_card)
         root.addWidget(experience_card)
         root.addWidget(ai_card)
         root.addWidget(export_card)
         root.addStretch()
+
+    def set_security_state(
+        self,
+        enabled: bool,
+        locked: bool,
+        *,
+        demo: bool = False,
+        message: str = "",
+    ) -> None:
+        if demo:
+            self.security_status.setText(tr("演示模式", "Demo mode"))
+            self.security_detail.setText(
+                tr("虚构数据演示不会修改真实加密设置。", "Synthetic demo data does not change real encryption settings.")
+            )
+        elif not enabled:
+            self.security_status.setText(tr("未启用", "Not enabled"))
+            self.security_detail.setText(
+                tr(
+                    "启用后，数据库与全文索引使用 SQLCipher 加密，照片、日记和日报使用 AES-256-GCM 加密；主密钥由 Windows DPAPI 保护。",
+                    "Once enabled, SQLCipher encrypts the database and search index; AES-256-GCM encrypts photos, journals, and reflections. Windows DPAPI protects the master key.",
+                )
+            )
+        elif locked:
+            self.security_status.setText(tr("已加密 · 已锁定", "Encrypted · Locked"))
+            self.security_detail.setText(message or tr("记录已暂停，解锁后才能查看或继续记录。", "Recording is paused until your data is unlocked."))
+        else:
+            self.security_status.setText(tr("已加密 · 已解锁", "Encrypted · Unlocked"))
+            self.security_detail.setText(message or tr("数据库、搜索索引和本地附件均受保护。", "The database, search index, and local attachments are protected."))
+        self.enable_encryption_button.setVisible(not enabled)
+        self.enable_encryption_button.setEnabled(not demo)
+        self.auto_lock_enabled.setEnabled(not demo)
+        self.auto_lock_minutes.setEnabled(not demo and self.auto_lock_enabled.isChecked())
+        self.lock_data_button.setVisible(enabled and not locked)
+        self.unlock_data_button.setVisible(enabled and locked)
+        self.recovery_key_button.setVisible(enabled and not locked)
+        self.recover_data_button.setVisible(enabled and locked)
+
+    def _save_security_settings(self) -> None:
+        try:
+            current = load_preferences()
+            save_preferences(
+                replace(
+                    current,
+                    auto_lock_enabled=self.auto_lock_enabled.isChecked(),
+                    auto_lock_minutes=self.auto_lock_minutes.value(),
+                )
+            )
+            QMessageBox.information(self, "Echo Recorder", tr("保护设置已保存。", "Protection settings saved."))
+        except Exception:
+            logger.exception("Failed to save protection settings.")
+            QMessageBox.warning(self, "Echo Recorder", tr("保护设置保存失败。", "Could not save protection settings."))
 
     def _card(self, object_name: str = "card") -> QFrame:
         card = QFrame()
@@ -266,15 +414,7 @@ class SettingsPage(QWidget):
         )
         try:
             current = load_preferences()
-            save_preferences(
-                Preferences(
-                    excluded_keywords=keywords,
-                    idle_minutes=self.idle_minutes.value(),
-                    language=current.language,
-                    ai_enabled=current.ai_enabled,
-                    ai_include_notes=current.ai_include_notes,
-                )
-            )
+            save_preferences(replace(current, excluded_keywords=keywords, idle_minutes=self.idle_minutes.value()))
             QMessageBox.information(
                 self,
                 "Echo Recorder",
@@ -297,12 +437,14 @@ class SettingsPage(QWidget):
                 save_openai_api_key(api_key)
                 self.api_key_input.clear()
             save_preferences(
-                Preferences(
-                    excluded_keywords=current.excluded_keywords,
-                    idle_minutes=current.idle_minutes,
+                replace(
+                    current,
                     language=language,
                     ai_enabled=self.ai_enabled.isChecked(),
                     ai_include_notes=self.ai_include_notes.isChecked(),
+                    ai_provider=str(self.ai_provider.currentData()),
+                    local_ai_base_url=self.local_url_input.text().strip() or Preferences().local_ai_base_url,
+                    local_ai_model=self.local_model_input.text().strip(),
                 )
             )
             language_changed = language != self._initial_language
@@ -323,3 +465,11 @@ class SettingsPage(QWidget):
                     "Could not save the language or API key. Check the log.",
                 ),
             )
+
+    def _update_ai_provider_fields(self) -> None:
+        using_local = self.ai_provider.currentData() == "local"
+        self.api_key_input.setEnabled(not using_local)
+        self.local_url_label.setVisible(using_local)
+        self.local_url_input.setVisible(using_local)
+        self.local_model_label.setVisible(using_local)
+        self.local_model_input.setVisible(using_local)

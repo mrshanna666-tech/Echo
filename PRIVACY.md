@@ -5,6 +5,11 @@ Echo is designed as a local-first Windows activity journal.
 ## Data handling
 
 - Activity history, notes, mood entries, photos, preferences, and generated summaries stay on the user's device by default.
+- Optional Data protection encrypts the activity database and search index with SQLCipher, user-authored files with AES-256-GCM, and protects the master key with Windows DPAPI.
+- Internal backups remain encrypted. Portable ZIP exports are readable decrypted copies created only after an explicit warning and never include the protected master key.
+- Password-encrypted `.echoexport` packages are available as the preferred portable export. Echo does not store the export password.
+- Optional auto-lock pauses recording, closes the database, clears the in-memory key, and discards rendered private content after the configured Windows idle period.
+- Recovery keys are shown or saved only on explicit request. They provide full access to encrypted Echo data and must be stored offline.
 - AI reflection is disabled by default. Local reflection generation never makes a network request.
 - Before an AI reflection request, Echo displays the exact sanitized categories that may be sent and requires confirmation for that request.
 - AI requests contain only the date, aggregate app durations, and total duration. Window titles, local paths, email addresses, URLs, IP addresses, photos, and raw activity events are excluded.

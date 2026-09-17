@@ -8,16 +8,21 @@ Echo Recorder is a privacy-first Windows desktop activity journal that helps peo
 - Presents a daily timeline and activity overview
 - Supports manual notes and mood journaling
 - Replays nearby activity and notes around a selected moment
+- Searches the complete local history with ranked, inspectable evidence
+- Deep-links answers back to the matching timeline and supports reversible user-confirmed corrections
 - Generates local daily reflections, with an optional privacy-reviewed GPT-5.6 mode
 - Switches between Simplified Chinese and English
 - Provides pause, exclusion, retention, and idle-time controls
 - Exports and backs up user-owned data
+- Optionally encrypts the database, search index, photos, journals, and reflections at rest
 
 ## Privacy by default
 
 Echo stores activity records, notes, preferences, and generated summaries under the local `data/` directory. These records are intentionally excluded from version control. Logs, screenshots, databases, photos, exports, environment files, and secrets must never be committed.
 
 See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md) before sharing code or test material.
+
+Data protection can be enabled under **Settings**. Echo migrates the database and FTS index to SQLCipher, encrypts user-authored files with AES-256-GCM, and protects the master key with Windows DPAPI. It can auto-lock after Windows is idle, clears rendered private data on lock, and supports an offline recovery key. Internal database backups remain encrypted. Portable exports can be either a readable ZIP or a password-encrypted `.echoexport` package using Argon2id and AES-256-GCM.
 
 The AI reflection feature is off by default. When enabled, Echo shows a sanitized preview before every request and sends nothing unless the user explicitly confirms. Window titles, filesystem paths, email addresses, URLs, photos, and raw activity records are excluded. Manual notes remain excluded unless the user separately opts in. The OpenAI API key is stored in Windows Credential Manager, not in the repository or preferences file.
 
@@ -27,6 +32,8 @@ The AI reflection feature is off by default. When enabled, Echo shows a sanitize
 - Python 3.12 or later
 - PySide6
 - pywin32
+- cryptography 45.x
+- sqlcipher3 0.6.2
 
 ## Run from source
 

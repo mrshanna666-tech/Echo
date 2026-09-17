@@ -2,8 +2,10 @@ import unittest
 
 from src.database.models import AppUsage, ManualNote
 from src.summary.ai_summary_generator import (
+    _extract_chat_completion_text,
     build_preview,
     build_sanitized_payload,
+    local_chat_completions_url,
     redact_sensitive_text,
 )
 
@@ -60,6 +62,16 @@ class AiPrivacyTests(unittest.TestCase):
         self.assertEqual(len(payload.notes), 1)
         self.assertNotIn("alice@example.com", payload.notes[0])
         self.assertNotIn("C:\\Users\\Alice", payload.notes[0])
+
+    def test_local_provider_uses_openai_compatible_endpoint(self):
+        self.assertEqual(
+            local_chat_completions_url("http://127.0.0.1:11434/v1/"),
+            "http://127.0.0.1:11434/v1/chat/completions",
+        )
+
+    def test_extracts_local_chat_completion_text(self):
+        response = {"choices": [{"message": {"content": "Local reflection"}}]}
+        self.assertEqual(_extract_chat_completion_text(response), "Local reflection")
 
 
 if __name__ == "__main__":

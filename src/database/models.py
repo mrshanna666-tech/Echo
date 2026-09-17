@@ -21,3 +21,21 @@ class ManualNote:
     date: str
     content: str
     created_at: str
+
+
+@dataclass(frozen=True)
+class ConfirmedMemory:
+    id: int
+    query: str
+    content: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class MemoryEvidence:
+    kind: str
+    record_id: int
+    date: str
+    title: str
+    detail: str
+    timestamp: str

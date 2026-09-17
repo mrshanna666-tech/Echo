@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from src.config import DATA_DIR
 from src.i18n import tr
+from src.security import protected_path, read_protected_text, write_protected_text
 from src.utils.time_utils import today_str
 
 
@@ -212,9 +213,7 @@ class DiaryPage(QWidget):
     def _save_edit(self) -> None:
         path = self._summary_path(self.selected_date)
         try:
-            temporary = path.with_suffix(".tmp")
-            temporary.write_text(self.editor.toPlainText().rstrip() + "\n", encoding="utf-8")
-            temporary.replace(path)
+            write_protected_text(path, self.editor.toPlainText().rstrip() + "\n")
             self.editor.setVisible(False)
             self.article_title.setVisible(True)
             self.article_body.setVisible(True)
@@ -250,9 +249,7 @@ class DiaryPage(QWidget):
         week_dir = DATA_DIR / "weekly"
         week_dir.mkdir(parents=True, exist_ok=True)
         output = week_dir / f"{start}_{end}.md"
-        temporary = output.with_suffix(".tmp")
-        temporary.write_text("\n".join(sections).rstrip() + "\n", encoding="utf-8")
-        temporary.replace(output)
+        output = write_protected_text(output, "\n".join(sections).rstrip() + "\n")
         QMessageBox.information(
             self,
             "Echo Recorder",
@@ -261,7 +258,7 @@ class DiaryPage(QWidget):
 
     def _summary_path(self, date_text: str) -> Path:
         year, month, day = date_text.split("-")
-        return DATA_DIR / year / month / day / "summary.md"
+        return protected_path(DATA_DIR / year / month / day / "summary.md")
 
     def _small_card(self, title: str) -> QFrame:
         frame = QFrame()
@@ -287,9 +284,9 @@ class DiaryPage(QWidget):
 
     def _read_summary(self, summary_path) -> str:
         try:
-            return summary_path.read_text(encoding="utf-8")
+            return read_protected_text(summary_path, encoding="utf-8")
         except UnicodeDecodeError:
-            return summary_path.read_text(encoding="utf-8-sig")
+            return read_protected_text(summary_path, encoding="utf-8-sig")
         except Exception:
             logger.exception("Failed to read summary: %s", summary_path)
             return ""
