@@ -28,10 +28,32 @@ class Preferences:
     local_ai_model: str = ""
 
 
+_CACHE: dict[Path, tuple[int, int, Preferences]] = {}
+
+
+def clear_preferences_cache() -> None:
+    _CACHE.clear()
+
+
 def load_preferences(path: Path = PREFERENCES_PATH) -> Preferences:
+    resolved = Path(path).resolve()
+    try:
+        stat = resolved.stat()
+        mtime_ns = stat.st_mtime_ns
+        size = stat.st_size
+    except OSError:
+        mtime_ns = -1
+        size = -1
+
+    cached = _CACHE.get(resolved)
+    if cached is not None and cached[0] == mtime_ns and cached[1] == size:
+        return cached[2]
+
     try:
         if not path.exists():
-            return Preferences()
+            prefs = Preferences()
+            _CACHE[resolved] = (mtime_ns, size, prefs)
+            return prefs
         data = json.loads(path.read_text(encoding="utf-8"))
         keywords = tuple(
             str(item).strip().lower()
@@ -46,7 +68,7 @@ def load_preferences(path: Path = PREFERENCES_PATH) -> Preferences:
         ai_provider = str(data.get("ai_provider", "openai"))
         if ai_provider not in {"openai", "local"}:
             ai_provider = "openai"
-        return Preferences(
+        prefs = Preferences(
             excluded_keywords=keywords or Preferences().excluded_keywords,
             idle_minutes=idle_minutes,
             auto_lock_enabled=bool(data.get("auto_lock_enabled", True)),
@@ -58,6 +80,8 @@ def load_preferences(path: Path = PREFERENCES_PATH) -> Preferences:
             local_ai_base_url=str(data.get("local_ai_base_url", Preferences().local_ai_base_url)).strip() or Preferences().local_ai_base_url,
             local_ai_model=str(data.get("local_ai_model", "")).strip(),
         )
+        _CACHE[resolved] = (mtime_ns, size, prefs)
+        return prefs
     except Exception:
         logger.exception("Failed to load preferences; defaults will be used.")
         return Preferences()
@@ -70,3 +94,4 @@ def save_preferences(preferences: Preferences, path: Path = PREFERENCES_PATH) ->
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(path)
+    clear_preferences_cache()

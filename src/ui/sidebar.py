@@ -129,7 +129,7 @@ class Sidebar(QFrame):
             ("timeline", tr("时间线", "Timeline")),
             ("diary", tr("日报", "Reflection")),
             ("notes", tr("一句话", "Notes")),
-            ("memory", "Memory"),
+            ("memory", tr("记忆", "Memory")),
             ("ask_echo", tr("问 Echo", "Ask Echo")),
             ("settings", tr("设置", "Settings")),
         ]:

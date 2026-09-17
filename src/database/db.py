@@ -81,6 +81,7 @@ class Database:
             self._conn.execute("SELECT COUNT(*) FROM sqlite_master").fetchone()
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA journal_mode=WAL;")
+            self._conn.execute("PRAGMA synchronous=NORMAL;")
             self._conn.execute("PRAGMA foreign_keys=ON;")
             logger.info("Database connected: %s", self.db_path)
         except sqlite3.Error:
@@ -570,7 +571,12 @@ class Database:
             return
         try:
             self._conn.commit()
+            try:
+                self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
+            except sqlite3.Error:
+                pass
             self._conn.close()
+            self._conn = None
             logger.info("Database closed.")
         except sqlite3.Error:
             logger.exception("Database close failed.")

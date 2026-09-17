@@ -4,7 +4,7 @@ import unittest
 
 from src.database.models import AppUsage
 from src.database.db import Database
-from src.preferences import Preferences, load_preferences, save_preferences
+from src.preferences import Preferences, clear_preferences_cache, load_preferences, save_preferences
 from src.ui.pages.timeline_page import activity_category, merge_activity_sessions
 
 
@@ -73,6 +73,22 @@ class PreferencesAndTimelineTests(unittest.TestCase):
             self.assertEqual(db.delete_records_by_date("2026-07-17"), (1, 1))
             self.assertEqual(db.count_records_by_date("2026-07-17"), (0, 0))
             db.close()
+
+    def test_preferences_cache_and_invalidation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "preferences.json"
+            initial = Preferences(("secret",), 10)
+            save_preferences(initial, path)
+            first = load_preferences(path)
+            self.assertEqual(first, initial)
+            second = load_preferences(path)
+            self.assertIs(first, second)
+
+            updated = Preferences(("secret", "other"), 20)
+            save_preferences(updated, path)
+            third = load_preferences(path)
+            self.assertEqual(third, updated)
+            self.assertIsNot(first, third)
 
 
 if __name__ == "__main__":
