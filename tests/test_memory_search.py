@@ -79,6 +79,39 @@ class MemorySearchTests(unittest.TestCase):
             self.assertEqual(db.search_memory("Project Echo"), [])
             db.close()
 
+    def test_confirmed_memories_can_be_edited_listed_and_cleared(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db = Database(Path(directory) / "activity.db")
+            db.initialize()
+            first_id = db.create_confirmed_memory(
+                query="What project was this?",
+                content="This was Project Echo.",
+                created_at="2026-07-31 11:00:00",
+            )
+            db.create_confirmed_memory(
+                query="What should I remember?",
+                content="Keep the evidence inspectable.",
+                created_at="2026-07-31 12:00:00",
+            )
+
+            self.assertTrue(
+                db.update_confirmed_memory(
+                    first_id,
+                    query="Which project was this?",
+                    content="This was Project Aurora.",
+                )
+            )
+            self.assertEqual(db.search_memory("Echo"), [])
+            updated = db.search_memory("Aurora")
+            self.assertEqual(len(updated), 1)
+            self.assertEqual(updated[0].title, "Which project was this?")
+            self.assertEqual(len(db.get_confirmed_memories()), 2)
+
+            self.assertEqual(db.clear_confirmed_memories(), 2)
+            self.assertEqual(db.get_confirmed_memories(), [])
+            self.assertEqual(db.search_memory("evidence inspectable"), [])
+            db.close()
+
     def test_date_filter_keeps_evidence_scoped(self):
         with tempfile.TemporaryDirectory() as directory:
             db = Database(Path(directory) / "activity.db")

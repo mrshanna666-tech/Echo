@@ -194,6 +194,11 @@ class Database:
                 CREATE TRIGGER IF NOT EXISTS confirmed_memory_search_delete AFTER DELETE ON confirmed_memories BEGIN
                     DELETE FROM memory_search WHERE kind = 'confirmed' AND record_id = old.id;
                 END;
+                CREATE TRIGGER IF NOT EXISTS confirmed_memory_search_update AFTER UPDATE ON confirmed_memories BEGIN
+                    DELETE FROM memory_search WHERE kind = 'confirmed' AND record_id = old.id;
+                    INSERT INTO memory_search(kind, record_id, date, title, detail, timestamp)
+                    VALUES ('confirmed', new.id, substr(new.created_at, 1, 10), new.query, new.content, new.created_at);
+                END;
                 """
             )
             indexed = self._conn.execute("SELECT COUNT(*) FROM memory_search").fetchone()[0]
@@ -458,6 +463,32 @@ class Database:
             logger.exception("Confirmed memory deletion failed. memory_id=%s", memory_id)
             return False
 
+    def update_confirmed_memory(self, memory_id: int, *, query: str, content: str) -> bool:
+        if self._conn is None or not content.strip():
+            return False
+        try:
+            updated = self._conn.execute(
+                "UPDATE confirmed_memories SET query = ?, content = ? WHERE id = ?",
+                (query.strip(), content.strip(), memory_id),
+            ).rowcount
+            self._conn.commit()
+            return updated > 0
+        except sqlite3.Error:
+            logger.exception("Confirmed memory update failed. memory_id=%s", memory_id)
+            return False
+
+    def clear_confirmed_memories(self) -> int:
+        if self._conn is None:
+            return 0
+        try:
+            deleted = self._conn.execute("DELETE FROM confirmed_memories").rowcount
+            self._conn.commit()
+            return max(deleted, 0)
+        except sqlite3.Error:
+            self._conn.rollback()
+            logger.exception("Confirmed memory clear failed.")
+            return 0
+
     def get_confirmed_memories(self, limit: int = 200) -> list[ConfirmedMemory]:
         if self._conn is None:
             return []
@@ -465,7 +496,7 @@ class Database:
             rows = self._conn.execute(
                 """SELECT id, query, content, created_at FROM confirmed_memories
                    ORDER BY created_at DESC LIMIT ?""",
-                (max(1, min(limit, 1000)),),
+                (max(1, min(limit, 10_000)),),
             ).fetchall()
             return [ConfirmedMemory(**dict(row)) for row in rows]
         except sqlite3.Error:

@@ -176,6 +176,9 @@ class SecurityManager:
             payload = base64.b32decode(padded, casefold=True)
         except Exception as exc:
             raise SecurityError("The Echo recovery key format is invalid.") from exc
+        canonical = base64.b32encode(payload).decode("ascii").rstrip("=")
+        if not hmac.compare_digest(compact, canonical):
+            raise SecurityError("The Echo recovery key encoding is not canonical.")
         if len(payload) != 32 + RECOVERY_CHECKSUM_SIZE:
             raise SecurityError("The Echo recovery key length is invalid.")
         master, checksum = payload[:32], payload[32:]

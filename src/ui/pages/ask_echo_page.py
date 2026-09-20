@@ -1,22 +1,31 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QDialog,
     QFrame,
+    QFileDialog,
+    QHeaderView,
     QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from src.database.db import Database
-from src.database.models import AppUsage, ManualNote, MemoryEvidence
+from src.database.models import AppUsage, ConfirmedMemory, ManualNote, MemoryEvidence
 from src.i18n import tr
 from src.utils.time_utils import display_time, human_duration, now, to_db_datetime, today_str
 
@@ -146,6 +155,226 @@ def answer_from_evidence(query: str, records: list[MemoryEvidence]) -> LocalAnsw
     )
 
 
+class ConfirmedMemoryManagerDialog(QDialog):
+    """Browse and revise the facts that a user explicitly asked Echo to remember."""
+
+    changed = Signal()
+
+    def __init__(self, database: Database, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.database = database
+        self._visible_memories: list[ConfirmedMemory] = []
+        self.setWindowTitle(tr("管理已确认记忆", "Manage confirmed memories"))
+        self.resize(860, 560)
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 22, 24, 22)
+        root.setSpacing(14)
+
+        title = QLabel(tr("Echo 记住的事实", "Facts Echo remembers"))
+        title.setObjectName("pageTitle")
+        explanation = QLabel(
+            tr(
+                "这些内容只来自你的明确纠正。你可以检查来源问题、修改内容或随时删除。",
+                "These facts come only from your explicit corrections. Review their source questions, edit them, or remove them at any time.",
+            )
+        )
+        explanation.setWordWrap(True)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText(tr("搜索事实、来源问题或日期", "Search facts, source questions, or dates"))
+        self.search_input.textChanged.connect(self.refresh)
+
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(
+            [tr("确认事实", "Confirmed fact"), tr("来源问题", "Source question"), tr("创建时间", "Created")]
+        )
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.verticalHeader().setVisible(False)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.itemSelectionChanged.connect(self._update_actions)
+        self.table.cellDoubleClicked.connect(lambda _row, _column: self._edit_selected())
+
+        self.status_label = QLabel()
+        self.edit_button = QPushButton(tr("编辑", "Edit"))
+        self.delete_button = QPushButton(tr("删除所选", "Delete selected"))
+        self.export_button = QPushButton(tr("导出 JSON", "Export JSON"))
+        self.clear_button = QPushButton(tr("清空全部", "Clear all"))
+        close_button = QPushButton(tr("完成", "Done"))
+        self.edit_button.clicked.connect(self._edit_selected)
+        self.delete_button.clicked.connect(self._delete_selected)
+        self.export_button.clicked.connect(self._export_memories)
+        self.clear_button.clicked.connect(self._clear_all)
+        close_button.clicked.connect(self.accept)
+
+        actions = QHBoxLayout()
+        actions.addWidget(self.edit_button)
+        actions.addWidget(self.delete_button)
+        actions.addWidget(self.export_button)
+        actions.addWidget(self.clear_button)
+        actions.addStretch()
+        actions.addWidget(close_button)
+
+        root.addWidget(title)
+        root.addWidget(explanation)
+        root.addWidget(self.search_input)
+        root.addWidget(self.table, 1)
+        root.addWidget(self.status_label)
+        root.addLayout(actions)
+        self.refresh()
+
+    def refresh(self, *_args) -> None:
+        memories = self.database.get_confirmed_memories(limit=10_000)
+        needle = self.search_input.text().strip().lower()
+        self._visible_memories = [
+            memory
+            for memory in memories
+            if not needle
+            or needle in f"{memory.content} {memory.query} {memory.created_at}".lower()
+        ]
+        self.table.setRowCount(len(self._visible_memories))
+        for row, memory in enumerate(self._visible_memories):
+            for column, value in enumerate((memory.content, memory.query, memory.created_at)):
+                item = QTableWidgetItem(value)
+                item.setToolTip(value)
+                self.table.setItem(row, column, item)
+        self.status_label.setText(
+            tr(
+                f"显示 {len(self._visible_memories)} 条，共 {len(memories)} 条已确认记忆",
+                f"Showing {len(self._visible_memories)} of {len(memories)} confirmed memories",
+            )
+        )
+        has_memories = bool(memories)
+        self.export_button.setEnabled(has_memories)
+        self.clear_button.setEnabled(has_memories)
+        self._update_actions()
+
+    def _selected_memory(self) -> ConfirmedMemory | None:
+        row = self.table.currentRow()
+        if 0 <= row < len(self._visible_memories):
+            return self._visible_memories[row]
+        return None
+
+    def _update_actions(self) -> None:
+        selected = self._selected_memory() is not None
+        self.edit_button.setEnabled(selected)
+        self.delete_button.setEnabled(selected)
+
+    def _edit_selected(self) -> None:
+        memory = self._selected_memory()
+        if memory is None:
+            return
+        query, accepted = QInputDialog.getText(
+            self,
+            tr("编辑来源问题", "Edit source question"),
+            tr("这条事实来自哪个问题？", "Which question led to this fact?"),
+            text=memory.query,
+        )
+        if not accepted:
+            return
+        content, accepted = QInputDialog.getMultiLineText(
+            self,
+            tr("编辑确认事实", "Edit confirmed fact"),
+            tr("修改 Echo 应记住的事实：", "Revise the fact Echo should remember:"),
+            memory.content,
+        )
+        if not accepted or not content.strip():
+            return
+        if not self.database.update_confirmed_memory(memory.id, query=query, content=content):
+            QMessageBox.warning(self, "Echo Recorder", tr("记忆修改失败。", "The memory could not be updated."))
+            return
+        self.changed.emit()
+        self.refresh()
+
+    def _delete_selected(self) -> None:
+        memory = self._selected_memory()
+        if memory is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            tr("删除这条记忆？", "Delete this memory?"),
+            tr(
+                f"将删除：\n\n{memory.content}",
+                f"This confirmed fact will be removed:\n\n{memory.content}",
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        if self.database.delete_confirmed_memory(memory.id):
+            self.changed.emit()
+            self.refresh()
+
+    def _clear_all(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            tr("清空全部已确认记忆？", "Clear all confirmed memories?"),
+            tr(
+                "所有用户确认事实都会删除；原始活动和笔记不会受到影响。",
+                "Every user-confirmed fact will be deleted. Source activity and notes are not affected.",
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        if self.database.clear_confirmed_memories():
+            self.changed.emit()
+            self.refresh()
+
+    def _export_memories(self) -> None:
+        memories = self.database.get_confirmed_memories(limit=10_000)
+        if not memories:
+            return
+        answer = QMessageBox.question(
+            self,
+            tr("导出可读记忆？", "Export readable memories?"),
+            tr(
+                "JSON 文件包含可直接阅读的确认事实，请保存在安全位置。继续吗？",
+                "The JSON file contains readable confirmed facts. Store it securely. Continue?",
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        target, _ = QFileDialog.getSaveFileName(
+            self,
+            tr("导出已确认记忆", "Export confirmed memories"),
+            "echo-confirmed-memories.json",
+            tr("JSON 文件 (*.json)", "JSON files (*.json)"),
+        )
+        if not target:
+            return
+        destination = Path(target)
+        temporary = destination.with_suffix(destination.suffix + ".tmp")
+        try:
+            payload = [
+                {
+                    "id": memory.id,
+                    "query": memory.query,
+                    "content": memory.content,
+                    "created_at": memory.created_at,
+                }
+                for memory in memories
+            ]
+            temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            temporary.replace(destination)
+            QMessageBox.information(
+                self,
+                "Echo Recorder",
+                tr(f"已导出到：\n{destination}", f"Exported to:\n{destination}"),
+            )
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            QMessageBox.warning(self, "Echo Recorder", tr("记忆导出失败。", "The memories could not be exported."))
+
+
 class AskEchoPage(QWidget):
     """Evidence-first local search surface for asking Echo about recorded history."""
 
@@ -269,11 +498,17 @@ class AskEchoPage(QWidget):
         self.recording_summary.setObjectName("askInsight")
         self.notes_summary = QLabel()
         self.notes_summary.setObjectName("askInsight")
+        self.confirmed_summary = QLabel()
+        self.confirmed_summary.setObjectName("askInsight")
+        self.manage_memories_button = self._link_button(tr("管理已确认记忆", "Manage confirmed memories"))
+        self.manage_memories_button.clicked.connect(self._manage_memories)
         learning_note = QLabel(tr("推断和偏好尚未自动保存；你始终可以查看并删除本地原始记录。", "Inferences and preferences are not saved automatically; local source records stay inspectable and removable."))
         learning_note.setObjectName("askHint")
         learning_note.setWordWrap(True)
         learning_layout.addWidget(self.recording_summary)
         learning_layout.addWidget(self.notes_summary)
+        learning_layout.addWidget(self.confirmed_summary)
+        learning_layout.addWidget(self.manage_memories_button)
         learning_layout.addWidget(learning_note)
         side.addWidget(learning)
         suggestions = QFrame()
@@ -302,6 +537,7 @@ class AskEchoPage(QWidget):
         notes = self.database.search_manual_notes("", limit=1)  # Avoid a full note scan in the idle view.
         self.recording_summary.setText(tr(f"已记录 {len(usage)} 段本地活动", f"{len(usage)} local activity entries recorded"))
         self.notes_summary.setText(tr("活动与笔记只在本机检索", "Activity and notes are searched only on this device"))
+        self._refresh_memory_summary()
         self._show_answer(answer_from_local_records("", usage, notes))
 
     def ask(self) -> None:
@@ -366,6 +602,7 @@ class AskEchoPage(QWidget):
             return
         self._last_confirmed_memory_id = memory_id
         self.undo_button.setVisible(True)
+        self._refresh_memory_summary()
         self._set_status(tr("已保存为用户确认记忆，可随时撤销或导出。", "Saved as user-confirmed memory. It can be undone or exported."))
 
     def _undo_correction(self) -> None:
@@ -374,7 +611,25 @@ class AskEchoPage(QWidget):
         if self.database.delete_confirmed_memory(self._last_confirmed_memory_id):
             self._last_confirmed_memory_id = None
             self.undo_button.setVisible(False)
+            self._refresh_memory_summary()
             self._set_status(tr("刚才的纠正已撤销。", "The last correction was removed."))
+
+    def _manage_memories(self) -> None:
+        dialog = ConfirmedMemoryManagerDialog(self.database, self)
+        dialog.changed.connect(self._memory_store_changed)
+        dialog.exec()
+
+    def _memory_store_changed(self) -> None:
+        self._refresh_memory_summary()
+        if self.query_input.text().strip():
+            self.ask()
+
+    def _refresh_memory_summary(self) -> None:
+        count = len(self.database.get_confirmed_memories(limit=10_000))
+        self.confirmed_summary.setText(
+            tr(f"{count} 条用户确认记忆", f"{count} user-confirmed memories")
+        )
+        self.manage_memories_button.setEnabled(count > 0)
 
     def _set_status(self, message: str) -> None:
         self.status_label.setText(message)
