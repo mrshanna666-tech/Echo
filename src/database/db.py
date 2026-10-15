@@ -503,6 +503,37 @@ class Database:
             logger.exception("Confirmed memory query failed.")
             return []
 
+    def get_star_map_records(
+        self, start_date: str, end_date: str, *, limit: int = 20_000,
+    ) -> tuple[list[AppUsage], list[ManualNote], bool]:
+        """Load a bounded date range, including notes with no activity that day."""
+        if self._conn is None:
+            return [], [], False
+        bounded_limit = max(1, min(limit, 20_000))
+        try:
+            usage_rows = self._conn.execute(
+                """SELECT id, date, app_name, window_title, start_time, end_time,
+                          duration_seconds, created_at
+                   FROM app_usage WHERE date BETWEEN ? AND ?
+                   ORDER BY start_time DESC, id DESC LIMIT ?""",
+                (start_date, end_date, bounded_limit + 1),
+            ).fetchall()
+            note_rows = self._conn.execute(
+                """SELECT id, date, content, created_at FROM manual_notes
+                   WHERE date BETWEEN ? AND ?
+                   ORDER BY created_at DESC, id DESC LIMIT ?""",
+                (start_date, end_date, bounded_limit + 1),
+            ).fetchall()
+            truncated = len(usage_rows) > bounded_limit or len(note_rows) > bounded_limit
+            return (
+                [AppUsage(**dict(row)) for row in reversed(usage_rows[:bounded_limit])],
+                [ManualNote(**dict(row)) for row in reversed(note_rows[:bounded_limit])],
+                truncated,
+            )
+        except sqlite3.Error:
+            logger.exception("Memory star map query failed.")
+            return [], [], False
+
     def get_recent_app_usage(self, limit: int = 500) -> list[AppUsage]:
         if self._conn is None:
             return []

@@ -8,6 +8,7 @@ Echo Recorder is a privacy-first Windows desktop activity journal that helps peo
 - Presents a daily timeline and activity overview
 - Supports manual notes and mood journaling
 - Replays nearby activity and notes around a selected moment
+- Explores local activity and notes in a zoomable memory atlas, with app constellations and source-linked replay
 - Searches the complete local history with ranked, inspectable evidence
 - Deep-links answers back to the matching timeline and supports reversible user-confirmed corrections
 - Generates local daily reflections, with an optional privacy-reviewed GPT-5.6 mode
@@ -46,6 +47,33 @@ python -m venv .venv
 Echo starts in the Windows system tray. Use the tray menu to open the main window, add a note, pause or resume recording, open the local data folder, or exit.
 
 Language and the optional AI reflection mode can be changed under **Settings**. Changing the language rebuilds the main window immediately without changing recorded data or the Memory layout.
+
+## Memory atlas
+
+Open **Memory atlas / 记忆星图** in the sidebar for a full-window sky with floating filters and zoom controls. Choose a 7-, 30-, or 90-day period ending on a selected date, then filter by application, notes, or search text. Warm stars represent applications, blue-white stars represent daily activity, and amber stars represent notes.
+
+- Drag to pan; scroll, use the zoom buttons, or press **+ / −** to zoom. **Fit / 全景** or **Home** restores the overview.
+- Click a star to focus it and open its floating source details. **Return to this moment / 回到这一刻** opens Memory replay at the recorded date and time.
+- Use the arrow keys or **Star list / 星点列表** to select stars without pointing at the canvas.
+- **Back to Echo / 返回 Echo** restores the main navigation. **Escape** closes open source details first, then returns to Echo.
+
+The overview shows up to eight applications ranked by recorded duration, twelve recent recorded days per application, and forty recent notes. Selecting an application expands its days across the chosen period. Search can uncover earlier matching notes within the loaded period; source details show the latest twenty records for a selected star. Loading is limited to the latest 20,000 records of each type in the chosen period, with an explanation when narrowing the range is needed.
+
+App constellations connect recorded days within the same application. Notes connect to the nearest visible activity on the same day only when it is within thirty minutes; independent notes remain unconnected. These links describe recorded proximity, not inferred projects or causality. The atlas is generated entirely on-device and its rendered contents are cleared when Echo locks. The sky is static when idle, and camera movement respects reduced-motion preferences.
+
+To explore an isolated synthetic atlas without recording activity or reading the normal Echo database:
+
+```powershell
+.\.venv\Scripts\python scripts\preview_memory_star_map.py --interactive
+```
+
+To generate QA captures and check replay and return navigation without opening an interactive window:
+
+```powershell
+.\.venv\Scripts\python scripts\preview_memory_star_map.py
+```
+
+The preview uses temporary synthetic data under `build/atlas-preview/`. Captures are written to `screenshots/memory-atlas.png`, `screenshots/memory-atlas-compact.png`, and `screenshots/memory-atlas-detail.png`. The `screenshots/` directory is ignored by Git; keep real data and generated screenshot files out of commits.
 
 ## Privacy-safe demo mode
 

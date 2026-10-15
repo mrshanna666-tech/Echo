@@ -39,6 +39,7 @@ from src.ui.pages.diary_page import DiaryPage
 from src.ui.pages.memory_page import MemoryPage
 from src.ui.pages.notes_page import NotesPage
 from src.ui.pages.settings_page import SettingsPage
+from src.ui.pages.star_map_page import StarMapPage
 from src.ui.pages.timeline_page import TimelinePage
 from src.ui.sidebar import Sidebar, reduced_motion_enabled
 from src.ui.smooth_scroll_area import SmoothScrollArea
@@ -419,6 +420,7 @@ class TodayWindow(QWidget):
             "diary": tr("日报", "Reflection"),
             "notes": tr("一句话", "Notes"),
             "memory": "Memory",
+            "star_map": tr("记忆星图", "Memory atlas"),
             "ask_echo": tr("问 Echo", "Ask Echo"),
             "settings": tr("设置", "Settings"),
         }
@@ -477,6 +479,8 @@ class TodayWindow(QWidget):
                 self.diary_page.refresh()
             if hasattr(self, "memory_page"):
                 self.memory_page.refresh()
+            if hasattr(self, "star_map_page") and self.stack.currentIndex() == self._page_indexes.get("star_map"):
+                self.star_map_page.refresh()
         except Exception:
             logger.exception("Failed to refresh today window.")
             self.today_status_body.setText(
@@ -516,6 +520,7 @@ class TodayWindow(QWidget):
             if key not in self._page_indexes:
                 return
             self.sidebar.set_active(key, emit=False)
+            self.sidebar.setVisible(key != "star_map")
             self.stack.setCurrentIndex(self._page_indexes[key])
             self.setWindowTitle(
                 f"Echo - {self._page_titles.get(key, tr('今天', 'Today'))}"
@@ -528,6 +533,8 @@ class TodayWindow(QWidget):
                 self.diary_page.set_date(today_str())
             if key == "memory":
                 self.memory_page.refresh()
+            if key == "star_map":
+                self.star_map_page.refresh()
             if key == "ask_echo":
                 self.ask_echo_page.refresh()
             self._fade_page(self.stack.currentWidget())
@@ -588,6 +595,9 @@ class TodayWindow(QWidget):
         self.notes_page = NotesPage(self.database)
         self.memory_page = MemoryPage(self.database)
         self.memory_page.report_requested.connect(self._open_diary_for_date)
+        self.star_map_page = StarMapPage(self.database)
+        self.star_map_page.replay_requested.connect(self._open_memory_moment)
+        self.star_map_page.exit_requested.connect(lambda: self._switch_page("today"))
         self.ask_echo_page = AskEchoPage(self.database)
         self.ask_echo_page.timeline_requested.connect(self._open_timeline_evidence)
         self.settings_page = SettingsPage()
@@ -613,6 +623,7 @@ class TodayWindow(QWidget):
             "diary": self.stack.addWidget(self.diary_scroll),
             "notes": self.stack.addWidget(self.notes_scroll),
             "memory": self.stack.addWidget(self.memory_scroll),
+            "star_map": self.stack.addWidget(self.star_map_page),
             "ask_echo": self.stack.addWidget(self.ask_echo_scroll),
             "settings": self.stack.addWidget(self.settings_scroll),
         }
@@ -750,6 +761,12 @@ class TodayWindow(QWidget):
             self.ask_echo_page.status_label.clear()
         if hasattr(self, "timeline_page"):
             self.timeline_page.search_input.clear()
+        if hasattr(self, "star_map_page"):
+            self.star_map_page.clear_private_content()
+
+    def _open_memory_moment(self, date_text: str, timestamp: str) -> None:
+        self.memory_page.focus_moment(date_text, timestamp)
+        self._switch_page("memory")
 
     def _open_timeline_evidence(self, query: str, date: str) -> None:
         self.timeline_page.focus_search(query, date)
