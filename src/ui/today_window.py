@@ -41,6 +41,7 @@ from src.ui.pages.notes_page import NotesPage
 from src.ui.pages.settings_page import SettingsPage
 from src.ui.pages.star_map_page import StarMapPage
 from src.ui.pages.timeline_page import TimelinePage
+from src.ui.page_transition import PageTransitionOverlay
 from src.ui.sidebar import Sidebar, reduced_motion_enabled
 from src.ui.smooth_scroll_area import SmoothScrollArea
 from src.utils.time_utils import display_time, human_duration, today_str
@@ -458,6 +459,8 @@ class TodayWindow(QWidget):
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
+        if hasattr(self, "_atlas_transition"):
+            self._atlas_transition.setGeometry(self.rect())
         if hasattr(self, "detail_panel"):
             self._position_drawer_overlay()
             self._position_detail_panel(visible=self.detail_panel.isVisible(), animated=False)
@@ -519,6 +522,11 @@ class TodayWindow(QWidget):
         try:
             if key not in self._page_indexes:
                 return
+            entering_atlas = key == "star_map" and self.stack.currentIndex() != self._page_indexes[key]
+            animate_entry = entering_atlas and self.isVisible() and not reduced_motion_enabled()
+            self._atlas_transition.clear()
+            if animate_entry:
+                self._atlas_transition.prepare(self.grab())
             self.sidebar.set_active(key, emit=False)
             self.sidebar.setVisible(key != "star_map")
             self.stack.setCurrentIndex(self._page_indexes[key])
@@ -537,10 +545,15 @@ class TodayWindow(QWidget):
                 self.star_map_page.refresh()
             if key == "ask_echo":
                 self.ask_echo_page.refresh()
-            self._fade_page(self.stack.currentWidget())
+            if key != "star_map":
+                self._fade_page(self.stack.currentWidget())
             if sys.platform == "win32":
                 self._commit_page_surface(self.stack.currentWidget())
+            if animate_entry:
+                self.star_map_page.enter()
         except Exception:
+            self._atlas_transition.clear()
+            self.star_map_page.cancel_entrance()
             logger.exception("Failed to switch page: %s", key)
 
     def _commit_page_surface(self, widget: QWidget) -> None:
@@ -578,6 +591,7 @@ class TodayWindow(QWidget):
         self.stack = QStackedWidget()
         self.stack.setObjectName("stack")
         root.addWidget(self.stack, 1)
+        self._atlas_transition = PageTransitionOverlay(self)
 
         self.scroll = SmoothScrollArea()
         self.scroll.setObjectName("scroll")
@@ -598,6 +612,8 @@ class TodayWindow(QWidget):
         self.star_map_page = StarMapPage(self.database)
         self.star_map_page.replay_requested.connect(self._open_memory_moment)
         self.star_map_page.exit_requested.connect(lambda: self._switch_page("today"))
+        self.star_map_page.entrance_started.connect(self._atlas_transition.fade_out)
+        self.star_map_page.entrance_finished.connect(self._atlas_transition.clear)
         self.ask_echo_page = AskEchoPage(self.database)
         self.ask_echo_page.timeline_requested.connect(self._open_timeline_evidence)
         self.settings_page = SettingsPage()
@@ -743,6 +759,7 @@ class TodayWindow(QWidget):
 
     def purge_sensitive_content(self) -> None:
         """Remove rendered private data before the window is discarded on lock."""
+        self._atlas_transition.clear()
         if hasattr(self, "mood_drawer"):
             self.mood_drawer.stop_camera()
             self.mood_drawer.note_edit.clear()

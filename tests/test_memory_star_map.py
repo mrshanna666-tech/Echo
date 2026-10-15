@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from dataclasses import replace
 from itertools import combinations
 import math
 import os
@@ -7,13 +8,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtCore import QDate, QEvent, QPoint, QPointF, Qt
+from PySide6.QtCore import QAbstractAnimation, QDate, QEvent, QPoint, Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from src.database.db import Database
 from src.database.models import AppUsage, ManualNote
 from src.memory_star_map import build_memory_atlas
+from src.memory_space import SpaceCamera, camera_between, constellation_positions
 from src.ui.pages.memory_page import MemoryPage
 from src.ui.pages.star_map_page import StarMapPage
 
@@ -123,6 +125,48 @@ class MemoryAtlasDatabaseTests(unittest.TestCase):
                 database.close()
 
 
+class MemorySpaceTests(unittest.TestCase):
+    def test_camera_flight_turns_the_short_way_and_eases_its_full_pose(self):
+        start = SpaceCamera(target=(200, -80, 40), distance=300, yaw=math.radians(179), pitch=-0.6)
+        end = SpaceCamera(target=(0, 0, 0), distance=1200, yaw=math.radians(-179), pitch=0.18)
+        first = camera_between(start, end, 0)
+        last = camera_between(start, end, 1)
+        self.assertEqual(first.target, start.target)
+        self.assertAlmostEqual(first.distance, start.distance)
+        self.assertEqual(last.target, end.target)
+        self.assertAlmostEqual(last.distance, end.distance)
+        self.assertAlmostEqual(math.remainder(last.yaw - end.yaw, math.tau), 0)
+        middle = camera_between(start, end, 0.5)
+        self.assertAlmostEqual(middle.yaw, math.pi)
+        self.assertAlmostEqual(middle.distance, 600)
+        self.assertAlmostEqual(middle.pitch, (start.pitch + end.pitch) / 2)
+        # Similar-sized end intervals travel much less than a middle interval.
+        at = lambda t: camera_between(start, end, t).target[0]
+        self.assertLess(abs(at(0.01) - at(0)), abs(at(0.51) - at(0.50)) / 100)
+        self.assertLess(abs(at(1) - at(0.99)), abs(at(0.51) - at(0.50)) / 100)
+
+    def test_perspective_depth_and_behind_camera_clipping(self):
+        camera = SpaceCamera(distance=1000, yaw=0, pitch=0)
+        near = camera.project((100, 0, 500), 1000, 700)
+        far = camera.project((100, 0, -500), 1000, 700)
+        self.assertGreater(near[0] - 500, far[0] - 500)
+        self.assertIsNone(camera.project((0, 0, 1100), 1000, 700))
+        self.assertEqual(camera.project((0, 0, 0), 1000, 700)[:2], (500, 350))
+
+    def test_orbit_exposes_depth_without_changing_memory_geometry(self):
+        atlas = build_memory_atlas([activity(1), activity(2, day="2026-10-13")], [])
+        positions = constellation_positions(atlas)
+        self.assertEqual(positions, constellation_positions(atlas))
+        self.assertGreater(len({p[2] for p in positions.values()}), 1)
+        camera = SpaceCamera()
+        before = {key: camera.project(p, 1000, 700) for key, p in positions.items()}
+        camera.orbit(100, 40)
+        self.assertNotEqual(before, {key: camera.project(p, 1000, 700) for key, p in positions.items()})
+        camera.orbit(0, 100000)
+        self.assertLess(abs(camera.pitch), math.pi / 2)
+        self.assertEqual(set(positions), {star.key for star in atlas.stars})
+
+
 class MemoryAtlasInteractionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -155,7 +199,7 @@ class MemoryAtlasInteractionTests(unittest.TestCase):
 
     def test_canvas_click_and_source_button_open_the_actual_memory_moment(self):
         star = next(star for star in self.page._atlas.stars if star.kind == "note")
-        pos = self.page.view.mapFromScene(QPointF(*star.position))
+        pos = self.page.view.project_star(star.key).toPoint()
         QTest.mouseClick(self.page.view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
         self.qt_app.processEvents()
         self.assertEqual(self.page._selected_key, star.key)
@@ -172,32 +216,38 @@ class MemoryAtlasInteractionTests(unittest.TestCase):
 
     def test_zoom_pan_and_keyboard_selection_work(self):
         view = self.page.view
-        scale = view.transform().m11()
+        distance = view.camera.distance
         view.zoom_by(2)
-        self.assertGreater(view.transform().m11(), scale)
-        before = view.mapToScene(QPoint(0, 0))
+        self.assertLess(view.camera.distance, distance)
+        before = view.camera.yaw
         QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(12, 12))
         QTest.mouseMove(view.viewport(), QPoint(80, 40))
         QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(80, 40))
-        self.assertNotEqual(view.mapToScene(QPoint(0, 0)), before)
+        self.assertNotEqual(view.camera.yaw, before)
+        target = view.camera.target
+        QTest.mousePress(view, Qt.MouseButton.RightButton, pos=QPoint(25, 25))
+        QTest.mouseMove(view, QPoint(100, 60))
+        QTest.mouseRelease(view, Qt.MouseButton.RightButton, pos=QPoint(100, 60))
+        self.assertNotEqual(view.camera.target, target)
         key = self.page._selected_key
         QTest.keyClick(view, Qt.Key.Key_Right)
         self.assertNotEqual(self.page._selected_key, key)
         view.fit_all()
-        self.assertAlmostEqual(view.transform().m11(), scale, places=2)
+        self.assertAlmostEqual(view.camera.distance, distance, places=2)
 
     def test_canvas_fills_page_and_details_do_not_resize_it_or_reopen_on_refresh(self):
         self.assertEqual(self.page.view.geometry(), self.page.rect())
         self.assertFalse(self.page.detail_panel.isVisible())
+        self.assertFalse(self.page.controls.isVisible())
         star = next(star for star in self.page._atlas.stars if star.kind == "note")
         self.page.view.select_star(star.key, reveal=True)
         self.qt_app.processEvents()
         self.assertTrue(self.page.detail_panel.isVisible())
         self.assertEqual(self.page.view.geometry(), self.page.rect())
         # Focus lands in the unobstructed part of the sky, not under its card.
-        point = self.page.view.mapFromScene(QPointF(*star.position))
+        point = self.page.view.project_star(star.key).toPoint()
         self.assertFalse(self.page.detail_panel.geometry().contains(point))
-        self.assertGreater(point.y(), self.page.controls.geometry().bottom())
+        self.assertGreater(point.y(), self.page.heading.geometry().bottom())
         self.page.close_detail_button.click()
         self.page.refresh()
         self.assertFalse(self.page.detail_panel.isVisible())
@@ -219,6 +269,158 @@ class MemoryAtlasInteractionTests(unittest.TestCase):
         self.page.back_button.click()
         self.assertEqual(exits, [True, True])
 
+    def test_filters_and_immersive_mode_keep_escape_and_selection_accessible(self):
+        self.page.filter_button.click()
+        self.assertTrue(self.page.controls.isVisible())
+        self.assertTrue(self.page.search_input.hasFocus())
+        QTest.keyClick(self.page.search_input, Qt.Key.Key_Escape)
+        self.assertFalse(self.page.controls.isVisible())
+        self.page.immerse_button.click()
+        self.assertFalse(self.page.heading.isVisible())
+        self.assertFalse(self.page.back_button.isVisible())
+        self.assertTrue(self.page.tools.isVisible())
+        QTest.keyClick(self.page.view, Qt.Key.Key_Escape)
+        self.assertTrue(self.page.heading.isVisible())
+        self.assertTrue(self.page.back_button.isVisible())
+
+    def test_entry_approaches_remembered_view_and_reveals_controls_without_losing_refresh(self):
+        view = self.page.view
+        destination = replace(view.camera)
+        positions = dict(view.world_positions)
+        with patch("src.ui.pages.star_map_page.reduced_motion_enabled", return_value=False), \
+             patch("src.ui.pages.star_map_canvas.reduced_motion_enabled", return_value=False):
+            self.page.enter()
+            self.qt_app.processEvents()
+            self.assertTrue(view._entry_active)
+            self.assertTrue(self.page._chrome_intro.active)
+            self.assertFalse(self.page.tools.isVisible())
+            self.assertGreater(view.camera.distance, destination.distance)
+            self.page.refresh()  # Unchanged recording refreshes must not cut the arrival short.
+            self.assertEqual(view._flight.state(), QAbstractAnimation.State.Running)
+            view._flight.setCurrentTime(view._flight.duration() // 2)
+            self.assertGreater(view.camera.distance, destination.distance)
+            self.assertLess(view.camera.distance, destination.distance * 1.27)
+            self.assertGreater(self.page._chrome_intro._progress, 0)
+            view._flight.setCurrentTime(view._flight.duration())
+            self.assertFalse(view._entry_active)
+            self.assertFalse(self.page._chrome_intro.active)
+            self.assertTrue(self.page.tools.isVisible())
+            self.assertTrue(self.page.heading.isVisible())
+            self.assertEqual(view.world_positions, positions)
+            self.assertAlmostEqual(view.camera.distance, destination.distance)
+            self.assertAlmostEqual(view.camera.yaw, destination.yaw)
+            self.assertEqual(view.camera.target, destination.target)
+
+    def test_entry_can_be_taken_over_and_hide_or_lock_cannot_restart_it(self):
+        view = self.page.view
+        with patch("src.ui.pages.star_map_page.reduced_motion_enabled", return_value=False), \
+             patch("src.ui.pages.star_map_canvas.reduced_motion_enabled", return_value=False):
+            self.page.enter()
+            self.qt_app.processEvents()
+            view.zoom_by(1.1)
+            self.assertFalse(view._entry_active)
+            self.assertFalse(self.page._chrome_intro.active)
+            self.assertTrue(self.page.tools.isVisible())
+            self.page.enter()
+            self.qt_app.processEvents()
+            self.page.hide()
+            self.qt_app.processEvents()
+            self.assertFalse(view._entry_active)
+            self.assertFalse(self.page._chrome_intro.active)
+            self.assertEqual(view._flight.state(), QAbstractAnimation.State.Stopped)
+            self.page.show()
+            self.qt_app.processEvents()
+            self.page.enter()
+            self.qt_app.processEvents()
+            self.assertTrue(self.page._chrome_intro.active)
+            self.page.clear_private_content()
+            self.assertFalse(self.page._chrome_intro.active)
+            self.assertFalse(view._entry_active)
+            self.page.refresh()
+            self.page.enter()  # Lock before the deferred entrance gets its turn.
+            self.page.clear_private_content()
+            self.qt_app.processEvents()
+            self.assertFalse(self.page._entrance_timer.isActive())
+            self.assertFalse(self.page._chrome_intro.active)
+            self.assertFalse(view._entry_active)
+            self.assertEqual(view.world_positions, {})
+
+    def test_entry_respects_reduced_motion(self):
+        destination = replace(self.page.view.camera)
+        self.page.enter()
+        self.qt_app.processEvents()
+        self.assertEqual(self.page.view.camera, destination)
+        self.assertFalse(self.page._chrome_intro.active)
+        self.assertEqual(self.page.view._flight.state(), QAbstractAnimation.State.Stopped)
+        self.assertTrue(self.page.tools.isVisible())
+
+    def test_home_button_glides_from_current_pose_and_can_be_interrupted(self):
+        view = self.page.view
+        destination = view._overview_camera()
+        view.camera.orbit(140, 50)
+        view.camera.pan(130, -80, view.height())
+        view.zoom_by(2)
+        start = replace(view.camera)
+        home = next(button for button in self.page.tools.findChildren(QPushButton)
+                    if button.accessibleName() == "回到星图全景")
+        with patch("src.ui.pages.star_map_canvas.reduced_motion_enabled", return_value=False):
+            home.click()
+            self.assertEqual(view._flight.state(), QAbstractAnimation.State.Running)
+            self.assertEqual(view.camera, start)  # The click itself never jumps.
+            view._flight.setCurrentTime(view._flight.duration() // 2)
+            middle = replace(view.camera)
+            self.assertGreater(middle.distance, start.distance)
+            self.assertLess(middle.distance, destination.distance)
+            self.assertNotEqual(middle.target, start.target)
+            self.assertNotEqual(middle.yaw, start.yaw)
+            self.assertNotEqual(middle.pitch, start.pitch)
+            # Dragging takes control at the current frame, not at an endpoint.
+            QTest.mousePress(view, Qt.MouseButton.LeftButton, pos=QPoint(12, 12))
+            self.assertEqual(view._flight.state(), QAbstractAnimation.State.Stopped)
+            self.assertEqual(view.camera, middle)
+            QTest.mouseMove(view, QPoint(50, 35))
+            QTest.mouseRelease(view, Qt.MouseButton.LeftButton, pos=QPoint(50, 35))
+            interrupted = replace(view.camera)
+            home.click()
+            self.assertEqual(view.camera, interrupted)
+            view._flight.setCurrentTime(view._flight.duration())
+            self.assertEqual(view.camera.target, destination.target)
+            self.assertAlmostEqual(view.camera.distance, destination.distance)
+            self.assertAlmostEqual(math.remainder(view.camera.yaw - destination.yaw, math.tau), 0)
+            self.assertAlmostEqual(view.camera.pitch, destination.pitch)
+            self.assertTrue(view._overview)
+
+    def test_home_key_glides_but_reduced_motion_returns_immediately(self):
+        view = self.page.view
+        view.camera.orbit(90, -30)
+        start = replace(view.camera)
+        with patch("src.ui.pages.star_map_canvas.reduced_motion_enabled", return_value=False):
+            QTest.keyClick(view, Qt.Key.Key_Home)
+            self.assertEqual(view._flight.state(), QAbstractAnimation.State.Running)
+            self.assertEqual(view.camera, start)
+        self.page._fit_all()  # setUp requests reduced motion.
+        self.assertEqual(view._flight.state(), QAbstractAnimation.State.Stopped)
+        self.assertEqual(view.camera.target, view._overview_camera().target)
+        self.assertAlmostEqual(view.camera.distance, view._fit_distance)
+        self.assertTrue(view._overview)
+
+    def test_drift_stops_on_selection_hide_and_lock_and_respects_reduced_motion(self):
+        view = self.page.view
+        self.assertFalse(view._drift.isActive())
+        with patch("src.ui.pages.star_map_canvas.reduced_motion_enabled", return_value=False):
+            view.set_roaming(True)
+            self.assertTrue(view._drift.isActive())
+            view.select_star(next(iter(view.world_positions)))
+            self.assertFalse(view._drift.isActive())
+            view.focus_star(view.selected_key())
+            self.assertEqual(view._flight.state(), QAbstractAnimation.State.Running)
+            self.page.hide()
+            self.assertEqual(view._flight.state(), QAbstractAnimation.State.Stopped)
+            self.assertFalse(view._drift.isActive())
+        self.page.clear_private_content()
+        self.assertEqual(view.world_positions, {})
+        self.assertEqual(view.selected_key(), "")
+
     def test_filter_search_empty_state_and_lock_clear_private_records(self):
         self.page.app_combo.setCurrentIndex(1)
         self.assertTrue(all(star.kind == "note" for star in self.page._atlas.stars))
@@ -232,7 +434,8 @@ class MemoryAtlasInteractionTests(unittest.TestCase):
         self.qt_app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
         self.assertEqual(self.page._usage, [])
         self.assertEqual(self.page._notes, [])
-        self.assertEqual(self.page.view.scene().items(), [])
+        self.assertEqual(self.page.view.world_positions, {})
+        self.assertEqual(self.page.view.atlas.stars, ())
         self.assertEqual(self.page.star_picker.count(), 0)
         self.assertEqual(self.page.detail_title.text(), "")
         self.assertFalse(self.page.detail_panel.isVisible())

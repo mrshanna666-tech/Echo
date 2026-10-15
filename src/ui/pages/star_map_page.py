@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import QDate, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QComboBox, QDateEdit, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QComboBox, QDateEdit, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
 
@@ -11,12 +11,16 @@ from src.database.db import Database
 from src.memory_star_map import MemoryAtlas, build_memory_atlas
 from src.i18n import tr
 from src.ui.pages.star_map_canvas import StarMapView
+from src.ui.page_transition import ChromeRevealOverlay
+from src.ui.sidebar import reduced_motion_enabled
 from src.utils.time_utils import display_time, human_duration
 
 
 class StarMapPage(QWidget):
     replay_requested = Signal(str, str)
     exit_requested = Signal()
+    entrance_started = Signal()
+    entrance_finished = Signal()
 
     def __init__(self, database: Database) -> None:
         super().__init__()
@@ -27,6 +31,11 @@ class StarMapPage(QWidget):
         self._truncated = False
         self._atlas = MemoryAtlas()
         self._selected_key = ""
+        self._immersed = False
+        self._owns_fullscreen = False
+        self._restore_timer = QTimer(self)
+        self._restore_timer.setSingleShot(True)
+        self._restore_timer.timeout.connect(self._restore_hidden_window)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -40,11 +49,11 @@ class StarMapPage(QWidget):
         heading = QVBoxLayout(self.heading)
         heading.setContentsMargins(0, 0, 0, 0)
         heading.setSpacing(5)
-        eyebrow = QLabel("ECHO  /  MEMORY ATLAS")
+        eyebrow = QLabel("ECHO  /  MEMORY UNIVERSE")
         eyebrow.setObjectName("atlasEyebrow")
         title = QLabel(tr("记忆星图", "Memory atlas"))
         title.setObjectName("atlasTitle")
-        subtitle = QLabel(tr("让散落的日子，慢慢连成星群。", "Let the scattered days become constellations."))
+        subtitle = QLabel(tr("在时光之间，缓缓航行。", "Drift gently between remembered days."))
         subtitle.setObjectName("atlasMuted")
         heading.addWidget(eyebrow)
         heading.addWidget(title)
@@ -52,14 +61,15 @@ class StarMapPage(QWidget):
         self.heading.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.back_button = QPushButton(tr("←  返回 Echo", "←  Back to Echo"), self)
         self.back_button.setObjectName("atlasTool")
-        self.back_button.clicked.connect(self.exit_requested.emit)
+        self.back_button.clicked.connect(self._leave_atlas)
         self.back_button.setAccessibleName(tr("退出星图，返回 Echo", "Leave the atlas and return to Echo"))
 
         self.controls = QFrame(self)
         self.controls.setObjectName("atlasControls")
-        controls = QHBoxLayout(self.controls)
-        controls.setContentsMargins(8, 6, 8, 6)
-        controls.setSpacing(6)
+        controls = QFormLayout(self.controls)
+        controls.setContentsMargins(20, 18, 20, 18)
+        controls.setSpacing(12)
+        controls.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.period_combo = QComboBox()
         for days in (7, 30, 90):
             self.period_combo.addItem(tr(f"最近 {days} 天", f"Last {days} days"), days)
@@ -82,8 +92,14 @@ class StarMapPage(QWidget):
         self.list_button = QPushButton(tr("星点列表", "Star list"))
         self.list_button.setObjectName("atlasTool")
         self.list_button.clicked.connect(self._open_star_list)
-        for widget in (self.period_combo, self.end_date, self.app_combo, self.search_input, self.list_button):
-            controls.addWidget(widget, 1 if widget is self.search_input else 0)
+        for label, widget in (
+            (tr("时间", "Period"), self.period_combo),
+            (tr("截止", "Ending"), self.end_date),
+            (tr("星群", "Group"), self.app_combo),
+            (tr("寻找", "Search"), self.search_input),
+        ):
+            controls.addRow(label, widget)
+        self.controls.hide()
 
         self.footer = QWidget(self)
         self.footer.setObjectName("atlasFooter")
@@ -109,10 +125,24 @@ class StarMapPage(QWidget):
         tools = QHBoxLayout(self.tools)
         tools.setContentsMargins(6, 5, 6, 5)
         tools.setSpacing(4)
+        self.filter_button = QPushButton(tr("探索", "Explore"))
+        self.filter_button.setObjectName("atlasTool")
+        self.filter_button.setCheckable(True)
+        self.filter_button.setAccessibleName(tr("展开或收起星图筛选", "Show or hide atlas filters"))
+        self.filter_button.clicked.connect(self._toggle_controls)
+        tools.addWidget(self.filter_button)
+        tools.addWidget(self.list_button)
+        self.roam_button = QPushButton(tr("漫游", "Drift"))
+        self.roam_button.setObjectName("atlasTool")
+        self.roam_button.setCheckable(True)
+        self.roam_button.setChecked(True)
+        self.roam_button.setToolTip(tr("开启或暂停缓慢环绕；遵循减少动态效果设置", "Toggle slow camera drift; respects reduced motion"))
+        self.roam_button.toggled.connect(self.view.set_roaming)
+        tools.addWidget(self.roam_button)
         for label, name, action in (
             ("−", tr("缩小星图", "Zoom out"), lambda: self.view.zoom_by(1 / 1.25)),
             ("+", tr("放大星图", "Zoom in"), lambda: self.view.zoom_by(1.25)),
-            (tr("全景", "Fit"), tr("查看完整星图", "Fit the complete atlas"), self._fit_all),
+            (tr("归航", "Home"), tr("回到星图全景", "Return to the overview"), self._fit_all),
         ):
             button = QPushButton(label)
             button.setObjectName("atlasTool")
@@ -120,7 +150,17 @@ class StarMapPage(QWidget):
             button.setToolTip(name)
             button.clicked.connect(action)
             tools.addWidget(button)
-        self.help_label = QLabel(tr("拖动探索 · 滚轮缩放 · 点击星点回看", "Drag to explore · Scroll to zoom · Click a star"), self)
+        self.immerse_button = QPushButton(tr("沉浸", "Immerse"))
+        self.immerse_button.setObjectName("atlasTool")
+        self.immerse_button.setCheckable(True)
+        self.immerse_button.toggled.connect(self._set_immersed)
+        tools.addWidget(self.immerse_button)
+        self.fullscreen_button = QPushButton(tr("全屏", "Fullscreen"), self)
+        self.fullscreen_button.setObjectName("atlasTool")
+        self.fullscreen_button.setAccessibleName(tr("切换全屏星图", "Toggle fullscreen atlas"))
+        self.fullscreen_button.setToolTip(tr("全屏 · F11", "Fullscreen · F11"))
+        self.fullscreen_button.clicked.connect(self._toggle_fullscreen)
+        self.help_label = QLabel(tr("拖动旋转 · 右键平移 · 滚轮靠近 · F11 全屏", "Drag to orbit · Right-drag to pan · Scroll to approach · F11 fullscreen"), self)
         self.help_label.setObjectName("atlasMuted")
         self.help_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
@@ -170,6 +210,12 @@ class StarMapPage(QWidget):
         self.detail_hint.setWordWrap(True)
         detail_layout.addWidget(self.detail_hint)
         self.detail_panel.hide()
+        self._chrome_intro = ChromeRevealOverlay(self)
+        self._entrance_timer = QTimer(self)
+        self._entrance_timer.setSingleShot(True)
+        self._entrance_timer.timeout.connect(self._begin_entrance)
+        self.view.entry_progress.connect(self._chrome_intro.advance)
+        self.view.entry_finished.connect(self._finish_entrance)
 
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
@@ -185,39 +231,132 @@ class StarMapPage(QWidget):
         self._escape = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         self._escape.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self._escape.activated.connect(self._escape_pressed)
+        self._fullscreen_shortcut = QShortcut(QKeySequence(Qt.Key.Key_F11), self)
+        self._fullscreen_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._fullscreen_shortcut.activated.connect(self._toggle_fullscreen)
         self._apply_styles()
         self.refresh()
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         if hasattr(self, "detail_panel"):
+            if hasattr(self, "_chrome_intro") and self._chrome_intro.active:
+                self.cancel_entrance()
             self._position_overlays()
+
+    def enter(self) -> None:
+        # Wait for the stack's geometry and initial fit before the camera moves.
+        self._entrance_timer.start(0)
+
+    def _begin_entrance(self) -> None:
+        if not self.isVisible() or reduced_motion_enabled():
+            self._finish_entrance()
+            return
+        self._position_overlays()
+        self._chrome_intro.prepare((self.heading, self.back_button, self.fullscreen_button,
+                                    self.footer, self.help_label, self.tools,
+                                    self.detail_panel, self.controls))
+        if self.view.enter_space():
+            self.entrance_started.emit()
+        else:
+            self._finish_entrance()
+
+    def _finish_entrance(self) -> None:
+        self._entrance_timer.stop()
+        self._chrome_intro.clear()
+        self.entrance_finished.emit()
+
+    def cancel_entrance(self) -> None:
+        if self.view._entry_active:
+            self.view.cancel_entry()
+        else:
+            self._finish_entrance()
 
     def _position_overlays(self) -> None:
         w, h = self.width(), self.height()
         margin = 32 if w >= 1100 else 24
-        self.heading.setGeometry(margin, 24, min(470, w - 220), 80)
+        self.heading.setGeometry(margin, 24, min(470, w - 220), 62)
         self.back_button.adjustSize()
         self.back_button.move(w - margin - self.back_button.width(), 28)
-        self.controls.setGeometry(margin, 119, min(w - margin * 2, 850), 48)
+        self.fullscreen_button.adjustSize()
+        self.fullscreen_button.move(w - margin - self.back_button.width() - self.fullscreen_button.width() - 12, 28)
+        self.controls.setGeometry(w - margin - 340, 86, 340, 228)
         self.tools.adjustSize()
-        self.tools.move(w - margin - self.tools.width(), h - 66)
-        self.footer.setGeometry(margin, h - 66, max(180, w - margin * 2 - self.tools.width() - 20), 44)
+        self.tools.move((w - self.tools.width()) // 2, h - 68)
+        self.footer.setGeometry(margin, h - 75, 245, 52)
+        self.footer.setVisible(not self._immersed and w >= 1200)
         self.help_label.adjustSize()
-        self.help_label.move(margin, h - 96)
-        self.detail_panel.setGeometry(w - margin - 330, 183, 330, max(260, h - 270))
+        self.help_label.move((w - self.help_label.width()) // 2, h - 95)
+        self.detail_panel.setGeometry(w - margin - 330, 90, 330, max(260, h - 190))
         for widget in (self.heading, self.back_button, self.controls, self.tools, self.footer,
-                       self.help_label, self.detail_panel):
+                       self.help_label, self.detail_panel, self.fullscreen_button):
             widget.raise_()
+
+    def _hide_controls(self) -> None:
+        self.controls.hide()
+        self.filter_button.setChecked(False)
+
+    def _toggle_controls(self) -> None:
+        visible = self.filter_button.isChecked()
+        self.detail_panel.hide()
+        self.controls.setVisible(visible)
+        self._position_overlays()
+        if visible:
+            self.search_input.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _set_immersed(self, immersed: bool) -> None:
+        self._immersed = immersed
+        self._hide_controls()
+        self.detail_panel.hide()
+        for widget in (self.heading, self.back_button, self.fullscreen_button, self.help_label):
+            widget.setVisible(not immersed)
+        for button in self.tools.findChildren(QPushButton):
+            button.setVisible(not immersed or button is self.immerse_button)
+        self.immerse_button.setText(tr("显示界面 · Esc", "Show interface · Esc") if immersed else tr("沉浸", "Immerse"))
+        self.view.minimal_labels = immersed
+        self.view._render()
+        self._position_overlays()
+
+    def _toggle_fullscreen(self) -> None:
+        if self._owns_fullscreen:
+            self._restore_window()
+        else:
+            self._was_maximized = self.window().isMaximized()
+            self._owns_fullscreen = True
+            self.window().showFullScreen()
+
+    def _restore_window(self) -> None:
+        if self._owns_fullscreen:
+            self._owns_fullscreen = False
+            if self._was_maximized:
+                self.window().showMaximized()
+            else:
+                self.window().showNormal()
+
+    def _leave_atlas(self) -> None:
+        self._restore_window()
+        self.exit_requested.emit()
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        self.cancel_entrance()
+        if self._owns_fullscreen:
+            self._restore_timer.start(0)
+        super().hideEvent(event)
+
+    def _restore_hidden_window(self) -> None:
+        if self.isHidden():
+            self._restore_window()
 
     def _activate_star(self, key: str) -> None:
         if not key:
             return
+        self._hide_controls()
         self.detail_panel.show()
         self._position_overlays()
         self.view.focus_star(key, self.detail_panel.width() + 32)
 
     def _open_star_list(self) -> None:
+        self._hide_controls()
         if self._atlas.stars and not self._selected_key:
             self.view.select_star(self._atlas.stars[0].key)
         self.detail_panel.show()
@@ -230,13 +369,21 @@ class StarMapPage(QWidget):
 
     def _fit_all(self) -> None:
         self._close_detail()
-        self.view.fit_all()
+        self.view.clear_selection()
+        self.view.fit_all(animated=True)
 
     def _escape_pressed(self) -> None:
-        if self.detail_panel.isVisible():
+        if self.controls.isVisible():
+            self._hide_controls()
+            self.view.setFocus(Qt.FocusReason.OtherFocusReason)
+        elif self.detail_panel.isVisible():
             self._close_detail()
+        elif self._immersed:
+            self.immerse_button.setChecked(False)
+        elif self._owns_fullscreen:
+            self._restore_window()
         else:
-            self.exit_requested.emit()
+            self._leave_atlas()
 
     def refresh(self, *_args) -> None:
         self._search_timer.stop()
@@ -367,7 +514,9 @@ class StarMapPage(QWidget):
         ))
 
     def clear_private_content(self) -> None:
+        self.cancel_entrance()
         self._search_timer.stop()
+        self._hide_controls()
         self.detail_panel.hide()
         self._usage.clear()
         self._notes.clear()
@@ -388,15 +537,16 @@ class StarMapPage(QWidget):
 
     def _apply_styles(self) -> None:
         self.setStyleSheet("""
-            QWidget#starMapPage, QGraphicsView#starCanvas { background: #070d1c; border: none; }
+            QWidget#starMapPage { background: #020307; border: none; }
+            QWidget#starCanvas { border: none; }
             QWidget#atlasHeading, QWidget#atlasFooter { background: transparent; }
             QWidget { color: #cdd7ea; }
             QLabel { background: transparent; }
-            QLabel#atlasEyebrow { color: #a6b3cc; font-size: 10px; font-weight: 600; letter-spacing: 2px; }
-            QLabel#atlasTitle { color: #f0f2fa; font-size: 27px; font-weight: 600; }
-            QLabel#atlasMuted { color: #8c9bb7; font-size: 11px; background: transparent; }
-            QLabel#atlasStats { color: #c6d0e3; font-size: 12px; }
-            QFrame#atlasControls { background: rgba(12, 21, 39, 220); border: 1px solid #29344d; border-radius: 10px; }
+            QLabel#atlasEyebrow { color: #818fa5; font-size: 9px; font-weight: 500; letter-spacing: 2px; }
+            QLabel#atlasTitle { color: #dbe3f0; font-size: 17px; font-weight: 400; letter-spacing: 3px; }
+            QLabel#atlasMuted { color: #74839c; font-size: 10px; background: transparent; }
+            QLabel#atlasStats { color: #8e9ab0; font-size: 10px; }
+            QFrame#atlasControls { background: rgba(8, 13, 25, 210); border: 1px solid #28324a; border-radius: 13px; }
             QComboBox, QDateEdit, QLineEdit { background: #111c31; color: #cbd6eb; border: 1px solid transparent; border-radius: 6px; padding: 5px 8px; font-size: 12px; min-height: 20px; }
             QComboBox:hover, QDateEdit:hover, QLineEdit:focus { border-color: #465575; }
             QComboBox::drop-down, QDateEdit::drop-down { border: none; width: 18px; }
@@ -405,7 +555,8 @@ class StarMapPage(QWidget):
             QCalendarWidget QAbstractItemView { background: #142138; color: #d6e0f1; selection-background-color: #2a3b5b; alternate-background-color: #1b2b43; }
             QPushButton#atlasTool { background: transparent; color: #c6d1e6; border: 1px solid transparent; border-radius: 6px; padding: 6px 10px; font-size: 12px; min-width: 16px; }
             QPushButton#atlasTool:hover, QPushButton#atlasTool:focus { background: #253451; border-color: #435372; }
-            QFrame#atlasDetail { background: rgba(13, 23, 41, 245); border: 1px solid #33415c; border-radius: 14px; }
+            QPushButton#atlasTool:checked { background: rgba(53, 70, 97, 100); color: #e2cfad; }
+            QFrame#atlasDetail { background: rgba(8, 14, 26, 235); border: 1px solid #2c374d; border-radius: 14px; }
             QFrame#atlasDetail QLabel, QWidget#atlasSourceList, QScrollArea { background: transparent; }
             QLabel#atlasDetailTitle { color: #e7edf9; font-size: 19px; font-weight: 600; }
             QFrame#atlasSource { background: #14223a; border: 1px solid #253651; border-radius: 9px; }
