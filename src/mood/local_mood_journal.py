@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from src.config import DATA_DIR
+from src.security import protected_path, read_protected_text, write_protected_text
 from src.utils.time_utils import today_str
 
 
@@ -38,7 +39,7 @@ def get_diary_json_path(date_text: str, create: bool = False) -> Path:
     path = DATA_DIR / year / month / day
     if create:
         path.mkdir(parents=True, exist_ok=True)
-    return path / "daily.json"
+    return protected_path(path / "daily.json")
 
 
 def create_mood_image_path() -> Path:
@@ -67,7 +68,8 @@ def append_mood_entry(image_path: Path, mood: str, note: str) -> MoodEntry:
             "note": entry.note,
         }
     )
-    json_path.write_text(
+    write_protected_text(
+        json_path,
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -99,7 +101,7 @@ def _read_diary_json(path: Path) -> dict:
     if not path.exists():
         return {"date": today_str(), "entries": []}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(read_protected_text(path, encoding="utf-8"))
     except json.JSONDecodeError:
         logger.exception("Invalid diary JSON, recreating: %s", path)
         return {"date": today_str(), "entries": []}

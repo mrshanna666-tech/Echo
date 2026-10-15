@@ -61,6 +61,7 @@ class TimelinePage(QWidget):
     def __init__(self, database: Database) -> None:
         super().__init__()
         self.database = database
+        self._focus_date = ""
         self.setObjectName("content")
         root = QVBoxLayout(self)
         root.setContentsMargins(34, 28, 34, 34)
@@ -98,6 +99,7 @@ class TimelinePage(QWidget):
         root.addWidget(card)
         root.addStretch()
         self.search_input.textChanged.connect(self.refresh)
+        self.search_input.textEdited.connect(self._clear_focus_date)
         self.category_filter.currentIndexChanged.connect(self.refresh)
         self.refresh()
 
@@ -115,8 +117,10 @@ class TimelinePage(QWidget):
                 f"Today: {human_duration(total_seconds)} · {today_apps} apps · {today_notes} notes",
             )
         )
-        sessions = [item for item in merge_activity_sessions(self.database.get_recent_app_usage(limit=5000)) if (not query or query in f"{item.app_name} {item.title}".lower()) and (category == "all" or item.category == category)]
+        sessions = [item for item in merge_activity_sessions(self.database.get_recent_app_usage(limit=5000)) if (not self._focus_date or item.date == self._focus_date) and (not query or query in f"{item.app_name} {item.title}".lower()) and (category == "all" or item.category == category)]
         matching_notes = self.database.search_manual_notes(query) if query else []
+        if self._focus_date:
+            matching_notes = [item for item in matching_notes if item.date == self._focus_date]
         if not sessions and not matching_notes:
             self.rows_layout.addWidget(QLabel(tr("没有符合条件的活动记录。", "No matching activity.")))
             return
@@ -155,3 +159,15 @@ class TimelinePage(QWidget):
             widget = self.rows_layout.takeAt(0).widget()
             if widget:
                 widget.deleteLater()
+
+    def focus_search(self, query: str, date: str = "") -> None:
+        """Open a precise evidence trail requested by another page."""
+        self._focus_date = date
+        self.search_input.setText(query)
+        self.refresh()
+        self.search_input.setFocus()
+
+    def _clear_focus_date(self, _text: str) -> None:
+        if self._focus_date:
+            self._focus_date = ""
+            self.refresh()

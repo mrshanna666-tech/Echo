@@ -417,6 +417,14 @@ class MemoryPage(QWidget):
         self._render_fragments()
         self._render_replay()
 
+    def focus_moment(self, date_text: str, timestamp: str) -> None:
+        """Open source-linked replay from another Echo page."""
+        moment = _parse_datetime(timestamp)
+        if moment is None:
+            return
+        self._select_fragment(date_text, moment.strftime("%H:%M"))
+        self._refresh_scrubber_records()
+
     def _render_fragments(self) -> None:
         self._clear_layout(self.fragments_box)
         by_date: dict[str, list[AppUsage]] = {}

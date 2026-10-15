@@ -9,6 +9,7 @@ from src.config import DATA_DIR
 from src.database.db import Database
 from src.database.models import AppUsage, ManualNote
 from src.i18n import tr
+from src.security import protected_path, write_protected_text
 from src.utils.time_utils import display_time, today_str
 
 
@@ -132,15 +133,15 @@ def save_summary_file(date_text: str, markdown: str) -> Path:
     summary_dir = DATA_DIR / year / month / day
     summary_dir.mkdir(parents=True, exist_ok=True)
     summary_path = summary_dir / "summary.md"
-    if summary_path.exists():
+    existing = protected_path(summary_path)
+    if existing.exists():
         logger.info("summary.md overwritten: %s", summary_path)
-    summary_path.write_text(markdown, encoding="utf-8")
-    return summary_path
+    return write_protected_text(summary_path, markdown)
 
 
 def get_today_summary_path() -> Path:
     year, month, day = today_str().split("-")
-    return DATA_DIR / year / month / day / "summary.md"
+    return protected_path(DATA_DIR / year / month / day / "summary.md")
 
 
 def _usage_by_app(app_usage: list[AppUsage]) -> dict[str, int]:
